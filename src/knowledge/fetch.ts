@@ -209,15 +209,21 @@ export async function fetchSeedPages(urls: string[], opts?: FetchSeedOptions): P
 }
 
 /**
- * Where a redirect link really leads: one request, the redirect is NOT followed,
- * and the `Location` it names is returned when it is a safe http(s) URL. Null for
- * anything else (no redirect, an unsafe target, a failure, a timeout).
+ * What one un-followed request to a link showed: it answered as a page
+ * (`final`), it redirects to a safe http(s) address (`redirect`), or neither
+ * could be established (`unknown`: an unsafe or missing target, an error
+ * status, a failure, a timeout). `unknown` is never a quiet `final`.
  */
-export async function resolveRedirectTarget(
+export type RedirectCheck =
+  | { status: 'final' }
+  | { status: 'redirect'; target: string }
+  | { status: 'unknown' };
+
+export async function checkRedirect(
   url: string,
   opts?: { signal?: AbortSignal; timeoutMs?: number; fetchImpl?: typeof fetch },
-): Promise<string | null> {
-  if (!isSafeUrl(url)) return null;
+): Promise<RedirectCheck> {
+  if (!isSafeUrl(url)) return { status: 'unknown' };
   const fetchImpl = opts?.fetchImpl ?? globalThis.fetch;
   const c = new AbortController();
   const id = setTimeout(() => c.abort(), opts?.timeoutMs ?? 5000);
@@ -225,17 +231,27 @@ export async function resolveRedirectTarget(
   opts?.signal?.addEventListener('abort', onAbort);
   try {
     const res = await fetchImpl(url, { method: 'GET', redirect: 'manual', signal: c.signal });
-    // Only the headers matter; do not download a body.
+    // Only the status and headers matter; do not download a body.
     await res.body?.cancel().catch(() => {});
-    if (res.status < 300 || res.status >= 400) return null;
+    if (res.status >= 200 && res.status < 300) return { status: 'final' };
+    if (res.status < 300 || res.status >= 400) return { status: 'unknown' };
     const location = res.headers.get('location');
-    if (!location) return null;
+    if (!location) return { status: 'unknown' };
     const target = new URL(location, url).toString();
-    return isSafeUrl(target) ? target : null;
+    return isSafeUrl(target) ? { status: 'redirect', target } : { status: 'unknown' };
   } catch {
-    return null;
+    return { status: 'unknown' };
   } finally {
     clearTimeout(id);
     opts?.signal?.removeEventListener('abort', onAbort);
   }
+}
+
+/** The safe address a redirect link names, or null when it names none. */
+export async function resolveRedirectTarget(
+  url: string,
+  opts?: { signal?: AbortSignal; timeoutMs?: number; fetchImpl?: typeof fetch },
+): Promise<string | null> {
+  const check = await checkRedirect(url, opts);
+  return check.status === 'redirect' ? check.target : null;
 }

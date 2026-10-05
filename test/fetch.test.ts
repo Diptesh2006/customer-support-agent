@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { isBlockedHost, isSafeUrl, fetchSeedPages, htmlToText, resolveRedirectTarget } from '../src/knowledge/fetch.js';
+import { isBlockedHost, isSafeUrl, fetchSeedPages, htmlToText, resolveRedirectTarget, checkRedirect } from '../src/knowledge/fetch.js';
 
 describe('isBlockedHost', () => {
   it('blocks localhost variants', () => {
@@ -189,6 +189,17 @@ describe('resolveRedirectTarget', () => {
     expect(await resolveRedirectTarget('https://r.example.org/x', { fetchImpl: reply(302) })).toBeNull();
     expect(await resolveRedirectTarget('https://r.example.org/x', { fetchImpl: reply(302, 'http://127.0.0.1/admin') })).toBeNull();
     expect(await resolveRedirectTarget('https://r.example.org/x', { fetchImpl: reply(302, 'javascript:alert(1)') })).toBeNull();
+  });
+
+  it('checkRedirect tells a final page from a redirect from something it could not verify', async () => {
+    expect(await checkRedirect('https://r.example.org/x', { fetchImpl: reply(200) })).toEqual({ status: 'final' });
+    expect(await checkRedirect('https://r.example.org/x', { fetchImpl: reply(302, 'https://example.com/p') })).toEqual({ status: 'redirect', target: 'https://example.com/p' });
+    // A redirect to somewhere unsafe, a redirect naming nowhere, an error page, a failed request: none is "final".
+    const failing = (async () => { throw new Error('network'); }) as unknown as typeof fetch;
+    for (const fetchImpl of [reply(302, 'http://127.0.0.1/admin'), reply(302), reply(404), reply(500), failing]) {
+      expect(await checkRedirect('https://r.example.org/x', { fetchImpl })).toEqual({ status: 'unknown' });
+    }
+    expect(await checkRedirect('http://localhost/x', { fetchImpl: reply(200) })).toEqual({ status: 'unknown' });
   });
 
   it('is null when the request fails, and never requests an unsafe link', async () => {

@@ -3,7 +3,7 @@ import type { nRouter } from '@nrouter_ai/sdk';
 import type { WebSearchProvider, WebSource } from './types.js';
 import { createClient, groundedSearch } from './client.js';
 import { SupportAgentError } from './errors.js';
-import { resolveRedirectTarget } from './knowledge/fetch.js';
+import { checkRedirect, type RedirectCheck } from './knowledge/fetch.js';
 
 export const DEFAULT_WEB_SEARCH_MODEL = 'nrouter/auto';
 export const DEFAULT_WEB_SEARCH_LABEL = 'the web';
@@ -39,8 +39,11 @@ export interface NRouterWebSearchOptions {
    * questions; `allowedDomains` is what keeps outside content out.
    */
   requireTerms?: string[];
-  /** Resolves a search-engine redirect link to its real address, or null. Defaults to one un-followed request. */
-  resolveRedirect?: (url: string, signal?: AbortSignal) => Promise<string | null>;
+  /**
+   * Says what a link does: answers as a page, redirects somewhere, or cannot
+   * be verified. Defaults to one un-followed request per link.
+   */
+  resolveRedirect?: (url: string, signal?: AbortSignal) => Promise<RedirectCheck>;
 }
 
 /** The host the gateway's search grounding wraps every cited page in. */
@@ -103,7 +106,7 @@ export function createNRouterWebSearch(options: NRouterWebSearchOptions): WebSea
   const model = options.model ?? DEFAULT_WEB_SEARCH_MODEL;
   const domains = normalizeDomains(options.allowedDomains);
   const gate = termGate(options.requireTerms);
-  const resolve = options.resolveRedirect ?? ((url: string, signal?: AbortSignal) => resolveRedirectTarget(url, { signal }));
+  const resolve = options.resolveRedirect ?? ((url: string, signal?: AbortSignal) => checkRedirect(url, { signal }));
 
   /**
    * Where a citation finally lands when every step of the way stays inside the
@@ -115,15 +118,17 @@ export function createNRouterWebSearch(options: NRouterWebSearchOptions): WebSea
     for (let hop = 0; hop < MAX_REDIRECT_HOPS; hop++) {
       const viaEngine = hostOf(current) === GROUNDING_REDIRECT_HOST;
       if (!viaEngine && !insideDomains(current, allowed)) return null;
-      let next: string | null;
+      let check: RedirectCheck;
       try {
-        next = await resolve(current, signal);
+        check = await resolve(current, signal);
       } catch {
         return null;
       }
-      // No further redirect: an allowed page is the destination; an engine link that names none is unusable.
-      if (next === null) return viaEngine ? null : current;
-      current = next;
+      // Could not be verified: never treated as arrived.
+      if (check.status === 'unknown') return null;
+      // Answered as a page: the destination, unless it is the engine's own link, which is never one.
+      if (check.status === 'final') return viaEngine ? null : current;
+      current = check.target;
     }
     return null;
   }

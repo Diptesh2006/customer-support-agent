@@ -4,6 +4,7 @@ import { createNRouterWebSearch, GROUNDING_REDIRECT_HOST } from '../src/nrouter-
 import { runWebSearch, runWebSearchDetailed, searchAllowed, createWebSearchTool } from '../src/web-search.js';
 import { SupportAgentError } from '../src/errors.js';
 import type { WebSearchProvider, WebSearchResult } from '../src/types.js';
+import type { RedirectCheck } from '../src/knowledge/fetch.js';
 
 type Call = Record<string, unknown>;
 type Cite = { url: string; title?: string; start_index?: number; end_index?: number };
@@ -35,7 +36,12 @@ const targets: Record<string, string> = {
   [`${REDIRECT}docs`]: 'https://docs.nrouter.ai/guides/billing',
   [`${REDIRECT}outside`]: 'https://nodejs.org/en/about/previous-releases',
 };
-const resolveRedirect = async (url: string) => targets[url] ?? null;
+const found = (map: Record<string, string>) => async (url: string): Promise<RedirectCheck> => {
+  if (map[url]) return { status: 'redirect', target: map[url]! };
+  // An engine link that is not in the map leads nowhere we can verify; any other page is its own destination.
+  return url.startsWith(REDIRECT) ? { status: 'unknown' } : { status: 'final' };
+};
+const resolveRedirect = found(targets);
 
 describe('createNRouterWebSearch — allowedDomains', () => {
   it('keeps sources inside the allow-list, by their real URL, subdomains included', async () => {
@@ -94,7 +100,7 @@ describe('createNRouterWebSearch — allowedDomains', () => {
 
   it('follows an allowed page that itself redirects: one that ends outside is outside', async () => {
     const hop: Record<string, string> = { ...targets, 'https://nrouter.ai/go': 'https://evil.example/landing', 'https://nrouter.ai/old': 'https://nrouter.ai/pricing' };
-    const resolver = async (url: string) => hop[url] ?? null;
+    const resolver = found(hop);
     const outside = createNRouterWebSearch({
       client: fakeClient('The fee is 4%.', [{ url: 'https://nrouter.ai/go', start_index: 0, end_index: 14 }]),
       allowedDomains: ['nrouter.ai'],
@@ -110,11 +116,24 @@ describe('createNRouterWebSearch — allowedDomains', () => {
     expect((await detailed(moved)).sources.map(s => s.url)).toEqual(['https://nrouter.ai/pricing']);
   });
 
+  it('an allowed page whose destination cannot be verified is outside: unknown is never final', async () => {
+    for (const first of ['https://nrouter.ai/x', `${REDIRECT}pricing`]) {
+      const provider = createNRouterWebSearch({
+        client: fakeClient('The fee is 4%.', [{ url: first, start_index: 0, end_index: 14 }]),
+        allowedDomains: ['nrouter.ai'],
+        // The engine link resolves; the allowed page it names then answers with something unverifiable.
+        resolveRedirect: async (url: string): Promise<RedirectCheck> =>
+          url.startsWith(REDIRECT) ? { status: 'redirect', target: 'https://nrouter.ai/x' } : { status: 'unknown' },
+      });
+      expect((await detailed(provider)).sources, first).toEqual([]);
+    }
+  });
+
   it('gives up on a redirect chain that does not end', async () => {
     const provider = createNRouterWebSearch({
       client: fakeClient('The fee is 4%.', [{ url: 'https://nrouter.ai/a', start_index: 0, end_index: 14 }]),
       allowedDomains: ['nrouter.ai'],
-      resolveRedirect: async (url: string) => (url.endsWith('/a') ? 'https://nrouter.ai/b' : 'https://nrouter.ai/a'),
+      resolveRedirect: async (url: string): Promise<RedirectCheck> => ({ status: 'redirect', target: url.endsWith('/a') ? 'https://nrouter.ai/b' : 'https://nrouter.ai/a' }),
     });
     expect((await detailed(provider)).sources).toEqual([]);
   });

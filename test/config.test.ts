@@ -102,6 +102,14 @@ describe('resolveConfig', () => {
     expect(resolved.webSearch).toBe(ws);
   });
 
+  it('bounds the web search timeout', () => {
+    const search = async () => [];
+    expect(resolveConfig({ ...validBaseConfig, webSearch: { label: 't', search, timeoutMs: 30_000 } }).webSearch?.timeoutMs).toBe(30_000);
+    for (const bad of [0, 999, 60_001, Number.NaN, 1500.5]) {
+      expect(() => resolveConfig({ ...validBaseConfig, webSearch: { label: 't', search, timeoutMs: bad } })).toThrowError(SupportAgentError);
+    }
+  });
+
   // NEW TESTS FOR CONFIG VALIDATION
   it('validates topK is between 1 and 50', () => {
     expect(() => resolveConfig({ ...validBaseConfig, topK: 51 })).toThrowError(/topK/);

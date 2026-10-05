@@ -50,9 +50,34 @@ export async function POST(req: Request) {
 | `booking` | Optional `{ url, label? }`. Offers a booking link through the `action` event. `url` must be `https:` and at most 2048 characters; `label` is at most 60 characters and defaults to `Book a meeting` |
 | `suggestions` | Optional `true` or `{ max }` (1 to 5, default 3). Emits related follow-up questions through the `suggestions` event. Off by default |
 | `knowledge` | `KnowledgeStore` or `KnowledgeIndex` JSON |
-| `webSearch` | Optional web search provider |
+| `webSearch` | Optional web search provider, used only when the knowledge base has no confident answer. `createNRouterWebSearch({ apiKey })` searches through the gateway with the same key (see [Web Search](#web-search)) |
 | `memoryStore` | Optional `(sessionId) => MemoryStore` from `@nrouter_ai/sdk`. When set and the host passes `ctx.sessionId`, the stored history is authoritative: only the latest user turn from the request is appended, and earlier turns in the request body are ignored |
 | `maskPii` | Mask emails and phone numbers before text leaves the process (default `true`) |
+
+## Web Search
+
+When retrieval over your docs is not confident, the agent can search the web before it answers.
+`createNRouterWebSearch` does that through the gateway's own search grounding: one SDK call on the
+key you already have, no second vendor.
+
+```typescript
+import { createSupportAgent, createNRouterWebSearch } from '@nrouter_ai/support-agent';
+
+const agent = createSupportAgent({
+  apiKey: process.env.NROUTER_API_KEY!,
+  model: 'nrouter/auto',
+  knowledge,
+  webSearch: createNRouterWebSearch({
+    apiKey: process.env.NROUTER_API_KEY!,
+    model: 'nrouter/auto',   // the default; any model your gateway serves with web search
+    timeoutMs: 30_000,       // 1000 to 60000, default 8000
+  }),
+});
+```
+
+The pages the search cites arrive in the `citations` event with the rest. A search that fails or
+runs out of time contributes no sources and the answer still streams. Any object with a `label` and
+a `search(query, { maxResults, signal })` method works as a provider.
 
 ## Usage
 

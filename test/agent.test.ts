@@ -93,6 +93,23 @@ describe('SupportAgent', () => {
     expect(callHook).toHaveBeenCalledWith(expect.anything(), 'onGap', expect.objectContaining({ confidence: 'low', webSearched: true }));
   });
 
+  it('gives the search the timeout its provider asks for', async () => {
+    const { scoreConfidence } = await import('../src/confidence.js');
+    vi.mocked(scoreConfidence).mockReturnValue({ level: 'low', score: 0.1 });
+    const { runWebSearch } = await import('../src/web-search.js');
+    vi.mocked(runWebSearch).mockClear();
+
+    const agent = createSupportAgent({
+      client: fakeClient,
+      model: 'm',
+      knowledge: fakeIndex,
+      webSearch: { label: 'B', search: vi.fn(), timeoutMs: 30_000 },
+    });
+    for await (const _ of agent.chat({ messages: [{ role: 'user', content: 'hi' }] })) { /* drain */ }
+
+    expect(runWebSearch).toHaveBeenCalledWith(expect.anything(), expect.any(String), expect.objectContaining({ timeoutMs: 30_000 }));
+  });
+
   it('guardrail retry once', async () => {
     const { streamChat } = await import('../src/client.js');
     const { scoreConfidence } = await import('../src/confidence.js');

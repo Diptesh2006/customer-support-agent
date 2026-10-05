@@ -83,6 +83,49 @@ export async function streamChat(
   };
 }
 
+/** One web-grounded answer: its text and the URLs the gateway says it drew on. */
+export interface GroundedAnswer {
+  text: string;
+  /** `start`/`end` index into `text` when the gateway reports the cited span. */
+  citations: Array<{ title: string; url: string; start?: number; end?: number }>;
+}
+
+/**
+ * Ask the gateway for a web-grounded answer via the SDK's nr.chat, with the
+ * gateway's own search switched on. Malformed citations are dropped, not thrown.
+ */
+export async function groundedSearch(
+  client: nRouter,
+  opts: { model: string; query: string; maxTokens: number; signal?: AbortSignal; maskPii?: boolean },
+): Promise<GroundedAnswer> {
+  const query = opts.maskPii !== false ? maskPii(opts.query) : opts.query;
+  const res = await client.nr.chat({
+    model: opts.model,
+    systemPrompt: 'Search the web and answer the question in a few short, factual sentences.',
+    messages: [{ role: 'user', content: query }],
+    maxTokens: opts.maxTokens,
+    extra: { nrouter_web_search: true },
+    ...(opts.signal ? { signal: opts.signal } : {}),
+  });
+
+  const body = res.body as { choices?: Array<{ message?: { content?: unknown; annotations?: unknown } }> };
+  const message = body.choices?.[0]?.message;
+  const text = typeof message?.content === 'string' ? message.content : '';
+  const citations: GroundedAnswer['citations'] = [];
+  const annotations = Array.isArray(message?.annotations) ? message.annotations : [];
+  for (const a of annotations as Array<{ type?: unknown; url_citation?: Record<string, unknown> } | null>) {
+    const c = a && a.type === 'url_citation' ? a.url_citation : undefined;
+    if (!c || typeof c.url !== 'string') continue;
+    citations.push({
+      url: c.url,
+      title: typeof c.title === 'string' ? c.title : '',
+      ...(Number.isInteger(c.start_index) ? { start: c.start_index as number } : {}),
+      ...(Number.isInteger(c.end_index) ? { end: c.end_index as number } : {}),
+    });
+  }
+  return { text, citations };
+}
+
 /** Map SDK ResponseMeta to a CostEvent. Unpriced → costUsd null, never 0. */
 export function costFromMeta(meta: ResponseMeta): CostEvent {
   const priced = isPriced(meta);

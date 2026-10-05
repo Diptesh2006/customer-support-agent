@@ -98,6 +98,12 @@ export interface WebSource {
 export interface WebSearchProvider {
   /** Short label shown in the "Searched …" step, e.g. a domain. Never a secret. */
   readonly label: string;
+  /**
+   * How long one search may take, in milliseconds (1000 to 60000, default
+   * 8000). A search that runs out of time contributes no sources; the answer
+   * still streams.
+   */
+  readonly timeoutMs?: number;
   search(query: string, opts: { maxResults: number; signal?: AbortSignal }): Promise<WebSource[]>;
 }
 

@@ -9,6 +9,8 @@ export const DEFAULT_TOP_K = 5;
 export const DEFAULT_MAX_TOKENS = 1024;
 export const DEFAULT_MAX_TOOL_STEPS = 4;
 export const DEFAULT_AGENT_NAME = 'Support';
+export const MIN_WEB_SEARCH_TIMEOUT_MS = 1000;
+export const MAX_WEB_SEARCH_TIMEOUT_MS = 60_000;
 
 export const MAX_MODELS = 3;
 export const DEFAULT_BOOKING_LABEL = 'Book a meeting';
@@ -154,6 +156,17 @@ export function resolveConfig(config: SupportAgentConfig): ResolvedConfig {
   }
   const maskPii = config.maskPii !== false;
 
+  const webSearch = config.webSearch === false || config.webSearch === undefined ? null : config.webSearch;
+  if (webSearch && webSearch.timeoutMs !== undefined) {
+    const t = webSearch.timeoutMs;
+    if (!Number.isInteger(t) || t < MIN_WEB_SEARCH_TIMEOUT_MS || t > MAX_WEB_SEARCH_TIMEOUT_MS) {
+      throw new SupportAgentError(
+        'invalid_config',
+        `webSearch.timeoutMs must be an integer between ${MIN_WEB_SEARCH_TIMEOUT_MS} and ${MAX_WEB_SEARCH_TIMEOUT_MS}`,
+      );
+    }
+  }
+
   return {
     client,
     models,
@@ -168,7 +181,7 @@ export function resolveConfig(config: SupportAgentConfig): ResolvedConfig {
     limits,
     tools: config.tools ?? [],
     maxToolSteps,
-    webSearch: config.webSearch === false || config.webSearch === undefined ? null : config.webSearch,
+    webSearch,
     memoryStore: config.memoryStore ?? null,
     hooks: config.hooks ?? {},
     maskPii,

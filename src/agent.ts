@@ -36,7 +36,7 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
         webSearched = true;
         yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'running' };
         try {
-          webSources = await runWebSearch(cfg.webSearch, question, { signal: validatedReq.signal });
+          webSources = await runWebSearch(cfg.webSearch, question, { signal: validatedReq.signal, timeoutMs: cfg.webSearch.timeoutMs });
           yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'done' };
         } catch (err) {
           yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'error' };

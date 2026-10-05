@@ -24,3 +24,19 @@ export function addSearchCost(chat: CostEvent, search: CostEvent | 'unknown' | u
   if (chat.requestId) out.requestId = chat.requestId;
   return out;
 }
+
+/**
+ * Several chat calls made for one turn, as one cost: exact only when every
+ * call is, otherwise unpriced. The request id is the last call's, the answer
+ * the visitor saw.
+ */
+export function sumChatCosts(costs: CostEvent[]): CostEvent {
+  const last = costs[costs.length - 1]!;
+  if (costs.length === 1) return last;
+  const exact = costs.every(c => c.status === 'exact' && c.costUsd !== null);
+  const out: CostEvent = exact
+    ? { costUsd: costs.reduce((sum, c) => sum + (c.costUsd as number), 0), status: 'exact' }
+    : { costUsd: null, status: 'unpriced' };
+  if (last.requestId) out.requestId = last.requestId;
+  return out;
+}

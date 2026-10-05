@@ -6,7 +6,10 @@ import { latestQuestion, normalizeQuestion } from './gaps.js';
 import { retrieve } from './retrieval.js';
 import { scoreConfidence } from './confidence.js';
 import { runWebSearchDetailed, searchAllowed } from './web-search.js';
-import { addSearchCost } from './cost.js';
+import { addSearchCost, sumChatCosts } from './cost.js';
+
+/** What the model replies, and nothing else, when the docs it was given do not answer the question. */
+export const MISS_MARKER = '[[NOT_IN_DOCS]]';
 import { buildCitations, buildSystemPrompt } from './prompt.js';
 import { sanitizePageContext } from './page-context.js';
 import { runToolPhase } from './tools.js';
@@ -47,19 +50,24 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
         }
       }
       
-      const citations = buildCitations(chunks, webSources);
+      let citations = buildCitations(chunks, webSources);
       yield { type: 'confidence', level: conf.level, score: conf.score, webSearched };
       if (citations.length > 0) {
         yield { type: 'citations', citations };
       }
       
+      // Similar-looking docs can still not answer the question. When a search is
+      // available and has not run, the model is asked to say so with a marker, and
+      // the search runs then. Not with host tools: a second answer would run them twice.
+      const detectMiss = !webSearched && !!cfg.webSearch && cfg.tools.length === 0;
       const system = buildSystemPrompt({
         agentName: cfg.agentName,
         instructions: cfg.instructions,
         identity: validatedCtx.identity,
         pageContext: sanitizePageContext(validatedReq.pageContext, cfg.limits.maxPageContextChars),
         chunks,
-        webSources
+        webSources,
+        ...(detectMiss ? { missMarker: MISS_MARKER } : {})
       });
       
       let history: ChatTurn[] = validatedReq.messages;
@@ -74,6 +82,9 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       
       let fullResponse = '';
       let costEvent: CostEvent | undefined;
+      // Answers the visitor never saw (the model said the docs do not cover it) were still billed.
+      const unseenAnswerCosts: CostEvent[] = [];
+      let docsMissed = false;
       // A second attempt (next model, or the guardrail retry) is only safe while
       // the visitor has seen no token and no host tool has run.
       let tokensEmitted = false;
@@ -121,15 +132,42 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       // One answer attempt. An availability refusal moves to the next configured
       // model; `modelIndex` is shared, so the request makes at most
       // models.length - 1 fallbacks in total, the guardrail retry included.
-      async function* answer(sysPrompt: string): AsyncGenerator<AgentEvent> {
+      async function* answer(sysPrompt: string, watchForMiss = false): AsyncGenerator<AgentEvent> {
          for (;;) {
             try {
                const { phaseEvents, sResult } = await executePhase(sysPrompt, cfg.models[modelIndex]!);
                for (const ev of phaseEvents) yield ev;
+               // While the opening of the answer could still be the marker, hold it back.
+               let held = '';
+               let deciding = watchForMiss;
+               let missed = false;
                for await (const chunk of sResult.chunks) {
+                  if (missed) continue;
+                  if (deciding) {
+                     held += chunk;
+                     const opening = held.trimStart();
+                     if (opening.length < MISS_MARKER.length && MISS_MARKER.startsWith(opening)) continue;
+                     deciding = false;
+                     if (opening.startsWith(MISS_MARKER)) { missed = true; continue; }
+                     fullResponse += held;
+                     tokensEmitted = true;
+                     yield { type: 'token', text: held };
+                     continue;
+                  }
                   fullResponse += chunk;
                   tokensEmitted = true;
                   yield { type: 'token', text: chunk };
+               }
+               if (missed) {
+                  if (sResult.cost) unseenAnswerCosts.push(sResult.cost);
+                  docsMissed = true;
+                  return;
+               }
+               if (deciding && held !== '') {
+                  // The stream ended while still undecided: it was an ordinary, very short answer.
+                  fullResponse += held;
+                  tokensEmitted = true;
+                  yield { type: 'token', text: held };
                }
                costEvent = sResult.cost;
                return;
@@ -155,7 +193,31 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       }
 
       try {
-         yield* answer(system);
+         yield* answer(system, detectMiss);
+         if (docsMissed && cfg.webSearch) {
+            if (searchAllowed(cfg.webSearch, question)) {
+               webSearched = true;
+               yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'running' };
+               const searched = await runWebSearchDetailed(cfg.webSearch, question, { signal: validatedReq.signal, timeoutMs: cfg.webSearch.timeoutMs });
+               webSources = searched.sources;
+               searchCost = searched.cost;
+               yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'done' };
+               if (webSources.length > 0) {
+                  // The list the visitor holds changes: web sources now lead it.
+                  citations = buildCitations(chunks, webSources);
+                  yield { type: 'citations', citations };
+               }
+            }
+            // Answer again, from whatever there now is, without asking for the marker.
+            yield* answer(buildSystemPrompt({
+               agentName: cfg.agentName,
+               instructions: cfg.instructions,
+               identity: validatedCtx.identity,
+               pageContext: sanitizePageContext(validatedReq.pageContext, cfg.limits.maxPageContextChars),
+               chunks,
+               webSources
+            }));
+         }
       } catch (err: any) {
          const safeErr = toSafeError(err, config.apiKey ? [config.apiKey] : undefined);
          if (safeErr.code === 'guardrail_blocked' && webSearched && !tokensEmitted && !hostToolRan) {
@@ -199,7 +261,7 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
 
       if (costEvent) {
          // The search is a second billed call; count it with the answer.
-         const turnCost = addSearchCost(costEvent, searchCost);
+         const turnCost = addSearchCost(sumChatCosts([...unseenAnswerCosts, costEvent]), searchCost);
          yield {
             type: 'cost',
             costUsd: turnCost.costUsd,

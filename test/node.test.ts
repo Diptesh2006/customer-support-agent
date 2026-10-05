@@ -5,6 +5,21 @@ import path from 'node:path';
 import os from 'node:os';
 
 describe('readDocsDir', () => {
+  it('maps an index page to its folder address, the way a docs site serves it', async () => {
+    const tmpdir = await fs.mkdtemp(path.join(os.tmpdir(), 'nrouter-test-'));
+    try {
+      await fs.mkdir(path.join(tmpdir, 'guides'));
+      await fs.writeFile(path.join(tmpdir, 'index.mdx'), 'Root.');
+      await fs.writeFile(path.join(tmpdir, 'guides', 'index.mdx'), 'Guides home.');
+      await fs.writeFile(path.join(tmpdir, 'guides', 'indexing.mdx'), 'A page whose name only starts with index.');
+
+      const urls = (await readDocsDir(tmpdir, 'https://example.com/docs')).map(d => d.url).sort();
+      expect(urls).toEqual(['https://example.com/docs', 'https://example.com/docs/guides', 'https://example.com/docs/guides/indexing']);
+    } finally {
+      await fs.rm(tmpdir, { recursive: true, force: true });
+    }
+  });
+
   it('parses frontmatter and builds correct urls', async () => {
     const tmpdir = await fs.mkdtemp(path.join(os.tmpdir(), 'nrouter-test-'));
     try {

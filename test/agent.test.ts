@@ -171,6 +171,103 @@ describe('SupportAgent', () => {
     expect(events.find(e => e.type === 'confidence')).toMatchObject({ webSearched: false });
   });
 
+  describe('the docs look relevant but do not answer: search then', () => {
+    const MARK = '[[NOT_IN_DOCS]]';
+    const once = (...parts: string[]) => ({ cost: { costUsd: 0.01, status: 'exact' as const }, chunks: (async function* () { for (const p of parts) yield p; })() });
+
+    async function run(config: Record<string, unknown>, ...answers: Array<ReturnType<typeof once>>) {
+      const { streamChat } = await import('../src/client.js');
+      const { scoreConfidence } = await import('../src/confidence.js');
+      vi.mocked(scoreConfidence).mockReturnValue({ level: 'high', score: 0.6 });
+      let n = 0;
+      vi.mocked(streamChat).mockImplementation(async () => answers[Math.min(n++, answers.length - 1)]!);
+      const agent = createSupportAgent({ client: fakeClient, model: 'm', knowledge: fakeIndex, ...config } as any);
+      const events: any[] = [];
+      for await (const ev of agent.chat({ messages: [{ role: 'user', content: 'is nrouter hiring' }] })) events.push(ev);
+      return { events, calls: () => n, text: events.filter(e => e.type === 'token').map(e => e.text).join('') };
+    }
+
+    it('asks the model to say so, and searches when it does', async () => {
+      const { runWebSearchDetailed } = await import('../src/web-search.js');
+      const { buildSystemPrompt } = await import('../src/prompt.js');
+      vi.mocked(runWebSearchDetailed).mockResolvedValueOnce({ sources: [{ title: 'careers', url: 'https://x/careers', snippet: 'We are hiring.' }], cost: { costUsd: 0.03, status: 'exact' } });
+
+      const { events, calls, text } = await run({ webSearch: { label: 'the site', search: vi.fn(), reportsCost: true } }, once(MARK), once('Yes, see the careers page.'));
+
+      expect(vi.mocked(buildSystemPrompt).mock.calls[0]![0].missMarker).toBe(MARK);
+      expect(runWebSearchDetailed).toHaveBeenCalledTimes(1);
+      expect(calls()).toBe(2);
+      // The marker never reaches the visitor; the second answer does.
+      expect(text).toBe('Yes, see the careers page.');
+      expect(events.filter(e => e.type === 'tool_call').map(e => e.status)).toEqual(['running', 'done']);
+      // The second prompt carries the web sources and no longer asks for the marker.
+      const second = vi.mocked(buildSystemPrompt).mock.calls.at(-1)![0];
+      expect(second.webSources).toHaveLength(1);
+      expect(second.missMarker).toBeUndefined();
+      // Both answers and the search are in the bill.
+      const cost = events.find(e => e.type === 'cost');
+      expect(cost.chatCostUsd).toBeCloseTo(0.02, 10);
+      expect(cost.searchCostUsd).toBe(0.03);
+      expect(cost.costUsd).toBeCloseTo(0.05, 10);
+    });
+
+    it('recognises the marker when it arrives in pieces, with leading whitespace', async () => {
+      const { runWebSearchDetailed } = await import('../src/web-search.js');
+      vi.mocked(runWebSearchDetailed).mockClear();
+      const { text, calls } = await run({ webSearch: { label: 's', search: vi.fn() } }, once(' \n[[NOT_', 'IN_DOCS', ']]'), once('second'));
+      expect(runWebSearchDetailed).toHaveBeenCalledTimes(1);
+      expect(calls()).toBe(2);
+      expect(text).toBe('second');
+    });
+
+    it('streams an ordinary answer untouched, even a very short one', async () => {
+      const { runWebSearchDetailed } = await import('../src/web-search.js');
+      vi.mocked(runWebSearchDetailed).mockClear();
+      const long = await run({ webSearch: { label: 's', search: vi.fn() } }, once('To create ', 'a key, open Keys.'));
+      expect(long.text).toBe('To create a key, open Keys.');
+      const short = await run({ webSearch: { label: 's', search: vi.fn() } }, once('Yes.'));
+      expect(short.text).toBe('Yes.');
+      expect(runWebSearchDetailed).not.toHaveBeenCalled();
+    });
+
+    it('an answer that merely mentions the marker later is not a miss', async () => {
+      const { runWebSearchDetailed } = await import('../src/web-search.js');
+      vi.mocked(runWebSearchDetailed).mockClear();
+      const { calls } = await run({ webSearch: { label: 's', search: vi.fn() } }, once('The docs say use keys. ', MARK));
+      expect(calls()).toBe(1);
+      expect(runWebSearchDetailed).not.toHaveBeenCalled();
+    });
+
+    it('does not ask for the marker without a search provider', async () => {
+      const { buildSystemPrompt } = await import('../src/prompt.js');
+      await run({}, once('answer'));
+      expect(vi.mocked(buildSystemPrompt).mock.calls[0]![0].missMarker).toBeUndefined();
+    });
+
+    it('does not ask for the marker when the turn already searched', async () => {
+      const { scoreConfidence } = await import('../src/confidence.js');
+      const { buildSystemPrompt } = await import('../src/prompt.js');
+      const { streamChat } = await import('../src/client.js');
+      vi.mocked(scoreConfidence).mockReturnValue({ level: 'low', score: 0.1 });
+      vi.mocked(streamChat).mockImplementation(async () => once('answer'));
+      const agent = createSupportAgent({ client: fakeClient, model: 'm', knowledge: fakeIndex, webSearch: { label: 's', search: vi.fn() } });
+      for await (const _ of agent.chat({ messages: [{ role: 'user', content: 'q' }] })) { /* drain */ }
+      expect(vi.mocked(buildSystemPrompt).mock.calls[0]![0].missMarker).toBeUndefined();
+    });
+
+    it('when the provider gate refuses the search, it answers again without searching', async () => {
+      const { runWebSearchDetailed, searchAllowed } = await import('../src/web-search.js');
+      vi.mocked(runWebSearchDetailed).mockClear();
+      vi.mocked(searchAllowed).mockReturnValue(false);
+      const { events, calls, text } = await run({ webSearch: { label: 's', search: vi.fn() } }, once(MARK), once('The docs do not cover that.'));
+      vi.mocked(searchAllowed).mockReturnValue(true);
+      expect(runWebSearchDetailed).not.toHaveBeenCalled();
+      expect(events.some(e => e.type === 'tool_call')).toBe(false);
+      expect(calls()).toBe(2);
+      expect(text).toBe('The docs do not cover that.');
+    });
+  });
+
   it('still reports what the search cost when the answer itself fails', async () => {
     const { streamChat } = await import('../src/client.js');
     const { scoreConfidence } = await import('../src/confidence.js');

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { addSearchCost } from '../src/cost.js';
+import { addSearchCost, sumChatCosts } from '../src/cost.js';
 
 describe('addSearchCost', () => {
   it('leaves the chat cost alone when no search cost applies', () => {
@@ -39,5 +39,23 @@ describe('addSearchCost', () => {
     const out = addSearchCost({ costUsd: null, status: 'unpriced' }, { costUsd: null, status: 'unpriced' });
     expect(out.costUsd).toBeNull();
     expect(out.status).toBe('unpriced');
+  });
+});
+
+describe('sumChatCosts', () => {
+  it('returns a single call unchanged', () => {
+    const one = { costUsd: 0.01, status: 'exact' as const, requestId: 'r' };
+    expect(sumChatCosts([one])).toBe(one);
+  });
+
+  it('adds exact calls and keeps the last request id', () => {
+    const out = sumChatCosts([{ costUsd: 0.01, status: 'exact', requestId: 'a' }, { costUsd: 0.02, status: 'exact', requestId: 'b' }]);
+    expect(out.status).toBe('exact');
+    expect(out.costUsd).toBeCloseTo(0.03, 10);
+    expect(out.requestId).toBe('b');
+  });
+
+  it('is unpriced when any call is', () => {
+    expect(sumChatCosts([{ costUsd: 0.01, status: 'exact' }, { costUsd: null, status: 'unpriced' }])).toEqual({ costUsd: null, status: 'unpriced' });
   });
 });

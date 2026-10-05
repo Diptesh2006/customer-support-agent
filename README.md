@@ -84,6 +84,17 @@ is unknown (an unpriced model, or a search that was sent and never reported back
 `unpriced` and the unknown part is `null`; it is never a partial sum and never zero. The total does
 not include the question's embedding call.
 
+### When the search runs
+
+Docs first. The search runs in two cases:
+
+- retrieval found nothing close (low confidence), before the answer is written;
+- retrieval found pages that look related but do not answer the question. The model is told to say
+  so with a marker instead of writing "that is not in the docs"; the marker is never shown, the
+  search runs, and the answer is written again from what it found. That first reply is a billed
+  call and is counted in `cost`. This second case is off when you pass host `tools`, so they never
+  run twice.
+
 ### Keeping the search on your own sites
 
 By default the search covers the open web. A support agent usually should not: give it your sites,

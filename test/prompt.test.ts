@@ -59,6 +59,16 @@ describe('buildSystemPrompt', () => {
   });
 });
 
+describe('buildSystemPrompt — the docs-miss marker', () => {
+  const base = { agentName: 'Bot', instructions: '', chunks: [] };
+
+  it('asks for the marker only when one is given', () => {
+    expect(buildSystemPrompt(base)).not.toContain('[[NOT_IN_DOCS]]');
+    const prompt = buildSystemPrompt({ ...base, missMarker: '[[NOT_IN_DOCS]]' });
+    expect(prompt).toContain('reply with exactly [[NOT_IN_DOCS]]');
+  });
+});
+
 describe('buildCitations', () => {
   it('dedupes by URL and drops non-http', () => {
     const chunks: ScoredChunk[] = [

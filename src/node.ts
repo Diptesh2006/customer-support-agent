@@ -54,7 +54,10 @@ export async function readDocsDir(dir: string, baseUrl?: string): Promise<Source
         const relNoExt = rel.replace(/\.[^.]+$/, '');
         const relUnix = relNoExt.split(path.sep).join('/');
         
-        const url = baseUrl ? (baseUrl.endsWith('/') ? baseUrl + relUnix : baseUrl + '/' + relUnix) : 'file://' + relUnix;
+        // A docs site serves `guides/index` at `/guides`, and the root index at the base itself.
+        const page = relUnix === 'index' ? '' : relUnix.replace(/\/index$/, '');
+        const base = baseUrl ? baseUrl.replace(/\/+$/, '') : '';
+        const url = baseUrl ? (page === '' ? base : base + '/' + page) : 'file://' + relUnix;
         
         docs.push({
           title: title || entry.name,

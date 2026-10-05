@@ -111,6 +111,12 @@ export interface WebSearchProvider {
    * rather than silently leaving the search out.
    */
   readonly reportsCost?: boolean;
+  /**
+   * Asked before every search. Return false to skip it: nothing is sent,
+   * nothing is charged, and the visitor is not told a search ran. A gate that
+   * throws counts as false.
+   */
+  shouldSearch?(query: string): boolean;
   search(query: string, opts: { maxResults: number; signal?: AbortSignal }): Promise<WebSource[] | WebSearchResult>;
 }
 

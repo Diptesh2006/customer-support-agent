@@ -13,6 +13,7 @@ vi.mock('../src/tools.js', () => ({ runToolPhase: vi.fn().mockImplementation(asy
 vi.mock('../src/web-search.js', () => ({
   runWebSearch: vi.fn().mockResolvedValue([]),
   runWebSearchDetailed: vi.fn().mockResolvedValue({ sources: [] }),
+  searchAllowed: vi.fn().mockReturnValue(true),
 }));
 vi.mock('../src/client.js', () => ({
   createClient: vi.fn(),
@@ -152,6 +153,22 @@ describe('SupportAgent', () => {
     for await (const ev of agent.chat({ messages: [{ role: 'user', content: 'hi' }] })) events.push(ev);
 
     expect(events.find(e => e.type === 'cost')).toMatchObject({ costUsd: null, status: 'unpriced', chatCostUsd: 0.05, searchCostUsd: null });
+  });
+
+  it('does not search, or say it searched, when the provider gate says no', async () => {
+    const { scoreConfidence } = await import('../src/confidence.js');
+    vi.mocked(scoreConfidence).mockReturnValue({ level: 'low', score: 0.1 });
+    const { runWebSearchDetailed, searchAllowed } = await import('../src/web-search.js');
+    vi.mocked(runWebSearchDetailed).mockClear();
+    vi.mocked(searchAllowed).mockReturnValueOnce(false);
+
+    const agent = createSupportAgent({ client: fakeClient, model: 'm', knowledge: fakeIndex, webSearch: { label: 'B', search: vi.fn() } });
+    const events = [];
+    for await (const ev of agent.chat({ messages: [{ role: 'user', content: 'hi' }] })) events.push(ev);
+
+    expect(runWebSearchDetailed).not.toHaveBeenCalled();
+    expect(events.some(e => e.type === 'tool_call')).toBe(false);
+    expect(events.find(e => e.type === 'confidence')).toMatchObject({ webSearched: false });
   });
 
   it('still reports what the search cost when the answer itself fails', async () => {

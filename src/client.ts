@@ -98,12 +98,18 @@ export interface GroundedAnswer {
  */
 export async function groundedSearch(
   client: nRouter,
-  opts: { model: string; query: string; maxTokens: number; signal?: AbortSignal; maskPii?: boolean },
+  opts: { model: string; query: string; maxTokens: number; signal?: AbortSignal; maskPii?: boolean; sites?: string[] },
 ): Promise<GroundedAnswer> {
-  const query = opts.maskPii !== false ? maskPii(opts.query) : opts.query;
+  const masked = opts.maskPii !== false ? maskPii(opts.query) : opts.query;
+  // `sites` only steers the engine; the caller still checks where each result really came from.
+  const sites = opts.sites && opts.sites.length > 0 ? opts.sites : null;
+  const query = sites ? `${masked} (${sites.map(s => `site:${s}`).join(' OR ')})` : masked;
+  const systemPrompt = sites
+    ? `Search only these sites: ${sites.map(s => `site:${s}`).join(', ')}. Answer the question in a few short, factual sentences using only what those sites say. If they do not answer it, say so and nothing else.`
+    : 'Search the web and answer the question in a few short, factual sentences.';
   const res = await client.nr.chat({
     model: opts.model,
-    systemPrompt: 'Search the web and answer the question in a few short, factual sentences.',
+    systemPrompt,
     messages: [{ role: 'user', content: query }],
     maxTokens: opts.maxTokens,
     extra: { nrouter_web_search: true },

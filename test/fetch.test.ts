@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { isBlockedHost, isSafeUrl, fetchSeedPages, htmlToText } from '../src/knowledge/fetch.js';
+import { isBlockedHost, isSafeUrl, fetchSeedPages, htmlToText, resolveRedirectTarget } from '../src/knowledge/fetch.js';
 
 describe('isBlockedHost', () => {
   it('blocks localhost variants', () => {
@@ -166,5 +166,36 @@ describe('htmlToText', () => {
     expect(res.text).not.toContain('Ignore me');
     expect(res.text).not.toContain('Footer text');
     expect(res.text).not.toContain('alert(1)');
+  });
+});
+
+describe('resolveRedirectTarget', () => {
+  const reply = (status: number, location?: string) =>
+    (async () => new Response(null, { status, headers: location ? { location } : {} })) as unknown as typeof fetch;
+
+  it('returns where a redirect leads without following it', async () => {
+    const fetchImpl = vi.fn(reply(302, 'https://example.com/page'));
+    expect(await resolveRedirectTarget('https://r.example.org/x', { fetchImpl })).toBe('https://example.com/page');
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect((fetchImpl.mock.calls[0] as unknown as [string, RequestInit])[1].redirect).toBe('manual');
+  });
+
+  it('resolves a relative Location against the link', async () => {
+    expect(await resolveRedirectTarget('https://r.example.org/a/b', { fetchImpl: reply(301, '/c') })).toBe('https://r.example.org/c');
+  });
+
+  it('is null when there is no redirect, no Location, or the target is unsafe', async () => {
+    expect(await resolveRedirectTarget('https://r.example.org/x', { fetchImpl: reply(200) })).toBeNull();
+    expect(await resolveRedirectTarget('https://r.example.org/x', { fetchImpl: reply(302) })).toBeNull();
+    expect(await resolveRedirectTarget('https://r.example.org/x', { fetchImpl: reply(302, 'http://127.0.0.1/admin') })).toBeNull();
+    expect(await resolveRedirectTarget('https://r.example.org/x', { fetchImpl: reply(302, 'javascript:alert(1)') })).toBeNull();
+  });
+
+  it('is null when the request fails, and never requests an unsafe link', async () => {
+    const failing = (async () => { throw new Error('network'); }) as unknown as typeof fetch;
+    expect(await resolveRedirectTarget('https://r.example.org/x', { fetchImpl: failing })).toBeNull();
+    const fetchImpl = vi.fn(reply(302, 'https://example.com/'));
+    expect(await resolveRedirectTarget('http://localhost/x', { fetchImpl })).toBeNull();
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

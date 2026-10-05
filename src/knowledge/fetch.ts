@@ -207,3 +207,35 @@ export async function fetchSeedPages(urls: string[], opts?: FetchSeedOptions): P
 
   return docs;
 }
+
+/**
+ * Where a redirect link really leads: one request, the redirect is NOT followed,
+ * and the `Location` it names is returned when it is a safe http(s) URL. Null for
+ * anything else (no redirect, an unsafe target, a failure, a timeout).
+ */
+export async function resolveRedirectTarget(
+  url: string,
+  opts?: { signal?: AbortSignal; timeoutMs?: number; fetchImpl?: typeof fetch },
+): Promise<string | null> {
+  if (!isSafeUrl(url)) return null;
+  const fetchImpl = opts?.fetchImpl ?? globalThis.fetch;
+  const c = new AbortController();
+  const id = setTimeout(() => c.abort(), opts?.timeoutMs ?? 5000);
+  const onAbort = () => c.abort();
+  opts?.signal?.addEventListener('abort', onAbort);
+  try {
+    const res = await fetchImpl(url, { method: 'GET', redirect: 'manual', signal: c.signal });
+    // Only the headers matter; do not download a body.
+    await res.body?.cancel().catch(() => {});
+    if (res.status < 300 || res.status >= 400) return null;
+    const location = res.headers.get('location');
+    if (!location) return null;
+    const target = new URL(location, url).toString();
+    return isSafeUrl(target) ? target : null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(id);
+    opts?.signal?.removeEventListener('abort', onAbort);
+  }
+}

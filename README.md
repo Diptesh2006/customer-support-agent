@@ -84,7 +84,32 @@ is unknown (an unpriced model, or a search that was sent and never reported back
 `unpriced` and the unknown part is `null`; it is never a partial sum and never zero. The total does
 not include the question's embedding call.
 
-Any object with a `label` and a `search(query, { maxResults, signal })` method works as a provider.
+### Keeping the search on your own sites
+
+By default the search covers the open web. A support agent usually should not: give it your sites,
+and optionally the words a question must contain before a search is worth paying for.
+
+```typescript
+webSearch: createNRouterWebSearch({
+  apiKey: process.env.NROUTER_API_KEY!,
+  allowedDomains: ['example.com'],   // bare hostnames; subdomains included
+  requireTerms: ['acme'],            // optional: search only when the question names one
+}),
+```
+
+- `allowedDomains` is enforced on what comes back. Every cited page is checked by its real address
+  (the search engine's redirect links are resolved with one un-followed request each, never trusted
+  by their label), and the citations you get carry that real address. If any cited page is outside
+  the list, or the answer cites nothing, the whole result is discarded and the agent answers from
+  your docs alone. The engine is asked to stay on those sites, but that request is not the control;
+  the check on the result is. A discarded search was still made, so it is still charged and reported.
+- `requireTerms` is a cheap gate, not a boundary: a question that mentions the word passes it. It
+  exists to skip the search, and its charge, for plainly unrelated questions. A skipped search sends
+  nothing and the visitor is not told one ran.
+- An empty or malformed `allowedDomains` is refused when the provider is created.
+
+Any object with a `label` and a `search(query, { maxResults, signal })` method works as a provider,
+and may define `shouldSearch(query)` to gate its own searches.
 It may return a plain list of sources, or `{ sources, cost }` and set `reportsCost: true` if it knows
 what each search costs.
 

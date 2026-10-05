@@ -5,7 +5,7 @@ import { validateChatRequest, validateTrustedContext } from './limits.js';
 import { latestQuestion, normalizeQuestion } from './gaps.js';
 import { retrieve } from './retrieval.js';
 import { scoreConfidence } from './confidence.js';
-import { runWebSearchDetailed } from './web-search.js';
+import { runWebSearchDetailed, searchAllowed } from './web-search.js';
 import { addSearchCost } from './cost.js';
 import { buildCitations, buildSystemPrompt } from './prompt.js';
 import { sanitizePageContext } from './page-context.js';
@@ -34,7 +34,7 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       let webSources;
       let webSearched = false;
       let searchCost: CostEvent | 'unknown' | undefined;
-      if (conf.level === 'low' && cfg.webSearch) {
+      if (conf.level === 'low' && cfg.webSearch && searchAllowed(cfg.webSearch, question)) {
         webSearched = true;
         yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'running' };
         try {

@@ -10,6 +10,16 @@ export interface BoundedSearch {
   cost?: CostEvent | 'unknown';
 }
 
+/** Whether the provider's own gate lets this query be searched. No gate means yes; a gate that throws means no. */
+export function searchAllowed(provider: WebSearchProvider, query: string): boolean {
+  if (!provider.shouldSearch) return true;
+  try {
+    return provider.shouldSearch(query) === true;
+  } catch {
+    return false;
+  }
+}
+
 /** Bounded search: timeout, max results, http(s) URLs only, snippets capped. Failures return []. */
 export async function runWebSearch(
   provider: WebSearchProvider,
@@ -25,6 +35,9 @@ export async function runWebSearchDetailed(
   query: string,
   opts?: { maxResults?: number; timeoutMs?: number; signal?: AbortSignal },
 ): Promise<BoundedSearch> {
+  // Checked here, not only by the caller, so every path to a search is gated.
+  if (!searchAllowed(provider, query)) return { sources: [] };
+
   const maxResults = Math.min(opts?.maxResults ?? 5, 10);
   const timeoutMs = opts?.timeoutMs ?? 8000;
 

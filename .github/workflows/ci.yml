@@ -1,0 +1,47 @@
+# Unit suite, typecheck and build on every push and pull request.
+#
+# The unit suite includes the public-leak, dependency and no-raw-fetch guards.
+# The Playwright e2e needs a live API key and runs from a maintainer's machine,
+# never here.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+
+      # The runtime dependency surface is part of the product promise: one
+      # dependency, the SDK, exact-pinned.
+      - name: Only the SDK at runtime
+        run: |
+          node -e '
+            const d = require("./package.json").dependencies ?? {};
+            const names = Object.keys(d);
+            if (names.length !== 1 || names[0] !== "@nrouter_ai/sdk" || !/^[0-9]+\.[0-9]+\.[0-9]+$/.test(d["@nrouter_ai/sdk"])) {
+              console.error("::error::dependencies must be exactly an exact-pinned @nrouter_ai/sdk; got " + JSON.stringify(d));
+              process.exit(1);
+            }
+          '

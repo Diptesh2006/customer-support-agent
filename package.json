@@ -56,10 +56,9 @@
   "homepage": "https://nrouter.ai",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/nRouterGateway/nrouter-sdk.git",
-    "directory": "agents/customer-support-agent"
+    "url": "git+https://github.com/nRouterGateway/customer-support-agent.git"
   },
   "bugs": {
-    "url": "https://github.com/nRouterGateway/nrouter-sdk/issues"
+    "url": "https://github.com/nRouterGateway/customer-support-agent/issues"
   }
 }

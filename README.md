@@ -75,9 +75,18 @@ const agent = createSupportAgent({
 });
 ```
 
-The pages the search cites arrive in the `citations` event with the rest. A search that fails or
-runs out of time contributes no sources and the answer still streams. Any object with a `label` and
-a `search(query, { maxResults, signal })` method works as a provider.
+The pages the search cites arrive in the `citations` event, ahead of the doc matches on a turn that
+searched. A search that fails or runs out of time contributes no sources and the answer still streams.
+
+The search is a second billed call, and the `cost` event counts it: on a searched turn `costUsd` is
+the answer plus the search, with `chatCostUsd` and `searchCostUsd` showing the parts. If either part
+is unknown (an unpriced model, or a search that was sent and never reported back) the total is
+`unpriced` and the unknown part is `null`; it is never a partial sum and never zero. The total does
+not include the question's embedding call.
+
+Any object with a `label` and a `search(query, { maxResults, signal })` method works as a provider.
+It may return a plain list of sources, or `{ sources, cost }` and set `reportsCost: true` if it knows
+what each search costs.
 
 ## Usage
 

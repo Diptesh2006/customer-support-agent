@@ -10,7 +10,10 @@ vi.mock('../src/prompt.js', () => ({ buildCitations: vi.fn().mockReturnValue([])
 vi.mock('../src/page-context.js', () => ({ sanitizePageContext: vi.fn().mockReturnValue(null) }));
 vi.mock('../src/gaps.js', () => ({ latestQuestion: vi.fn().mockReturnValue('Q'), normalizeQuestion: vi.fn().mockReturnValue('q') }));
 vi.mock('../src/tools.js', () => ({ runToolPhase: vi.fn().mockImplementation(async (c, m, e) => ({ messages: m, ranTools: false })) }));
-vi.mock('../src/web-search.js', () => ({ runWebSearch: vi.fn().mockResolvedValue([]) }));
+vi.mock('../src/web-search.js', () => ({
+  runWebSearch: vi.fn().mockResolvedValue([]),
+  runWebSearchDetailed: vi.fn().mockResolvedValue({ sources: [] }),
+}));
 vi.mock('../src/client.js', () => ({
   createClient: vi.fn(),
   streamChat: vi.fn().mockImplementation(async (client, opts) => {
@@ -96,8 +99,8 @@ describe('SupportAgent', () => {
   it('gives the search the timeout its provider asks for', async () => {
     const { scoreConfidence } = await import('../src/confidence.js');
     vi.mocked(scoreConfidence).mockReturnValue({ level: 'low', score: 0.1 });
-    const { runWebSearch } = await import('../src/web-search.js');
-    vi.mocked(runWebSearch).mockClear();
+    const { runWebSearchDetailed } = await import('../src/web-search.js');
+    vi.mocked(runWebSearchDetailed).mockClear();
 
     const agent = createSupportAgent({
       client: fakeClient,
@@ -107,7 +110,96 @@ describe('SupportAgent', () => {
     });
     for await (const _ of agent.chat({ messages: [{ role: 'user', content: 'hi' }] })) { /* drain */ }
 
-    expect(runWebSearch).toHaveBeenCalledWith(expect.anything(), expect.any(String), expect.objectContaining({ timeoutMs: 30_000 }));
+    expect(runWebSearchDetailed).toHaveBeenCalledWith(expect.anything(), expect.any(String), expect.objectContaining({ timeoutMs: 30_000 }));
+  });
+
+  it('adds what the search cost to the cost event and the onCost hook', async () => {
+    const { scoreConfidence } = await import('../src/confidence.js');
+    vi.mocked(scoreConfidence).mockReturnValue({ level: 'low', score: 0.1 });
+    const { runWebSearchDetailed } = await import('../src/web-search.js');
+    vi.mocked(runWebSearchDetailed).mockResolvedValueOnce({ sources: [], cost: { costUsd: 0.03, status: 'exact' } });
+    const { callHook } = await import('../src/hooks.js');
+
+    const agent = createSupportAgent({
+      client: fakeClient,
+      model: 'm',
+      knowledge: fakeIndex,
+      webSearch: { label: 'B', search: vi.fn(), reportsCost: true },
+      hooks: { onCost: vi.fn() },
+    });
+    const events = [];
+    for await (const ev of agent.chat({ messages: [{ role: 'user', content: 'hi' }] })) events.push(ev);
+
+    const cost = events.find(e => e.type === 'cost');
+    expect(cost).toMatchObject({ status: 'exact', chatCostUsd: 0.05, searchCostUsd: 0.03 });
+    expect((cost as { costUsd: number }).costUsd).toBeCloseTo(0.08, 10);
+    expect(callHook).toHaveBeenCalledWith(expect.anything(), 'onCost', expect.objectContaining({ searchCostUsd: 0.03, chatCostUsd: 0.05 }));
+  });
+
+  it('a search whose charge is unknown makes the turn unpriced', async () => {
+    const { scoreConfidence } = await import('../src/confidence.js');
+    vi.mocked(scoreConfidence).mockReturnValue({ level: 'low', score: 0.1 });
+    const { runWebSearchDetailed } = await import('../src/web-search.js');
+    vi.mocked(runWebSearchDetailed).mockResolvedValueOnce({ sources: [], cost: 'unknown' });
+
+    const agent = createSupportAgent({
+      client: fakeClient,
+      model: 'm',
+      knowledge: fakeIndex,
+      webSearch: { label: 'B', search: vi.fn(), reportsCost: true },
+    });
+    const events = [];
+    for await (const ev of agent.chat({ messages: [{ role: 'user', content: 'hi' }] })) events.push(ev);
+
+    expect(events.find(e => e.type === 'cost')).toMatchObject({ costUsd: null, status: 'unpriced', chatCostUsd: 0.05, searchCostUsd: null });
+  });
+
+  it('still reports what the search cost when the answer itself fails', async () => {
+    const { streamChat } = await import('../src/client.js');
+    const { scoreConfidence } = await import('../src/confidence.js');
+    vi.mocked(scoreConfidence).mockReturnValue({ level: 'low', score: 0.1 });
+    const { runWebSearchDetailed } = await import('../src/web-search.js');
+    vi.mocked(runWebSearchDetailed).mockResolvedValueOnce({ sources: [], cost: { costUsd: 0.03, status: 'exact' } });
+    const { callHook } = await import('../src/hooks.js');
+    vi.mocked(streamChat).mockRejectedValue(new Error('upstream down'));
+
+    const agent = createSupportAgent({
+      client: fakeClient,
+      model: 'm',
+      knowledge: fakeIndex,
+      webSearch: { label: 'B', search: vi.fn(), reportsCost: true },
+      hooks: { onCost: vi.fn() },
+    });
+    const events = [];
+    for await (const ev of agent.chat({ messages: [{ role: 'user', content: 'hi' }] })) events.push(ev);
+
+    // The answer's own charge is unknown, so the total is; the search part is not lost.
+    expect(events.map(e => e.type).slice(-3)).toEqual(['error', 'cost', 'done']);
+    expect(events.find(e => e.type === 'cost')).toMatchObject({ costUsd: null, status: 'unpriced', chatCostUsd: null, searchCostUsd: 0.03 });
+    expect(callHook).toHaveBeenCalledWith(expect.anything(), 'onCost', expect.objectContaining({ searchCostUsd: 0.03 }));
+  });
+
+  it('the guardrail retry numbers its prompt by the citations already sent', async () => {
+    const { streamChat } = await import('../src/client.js');
+    const { scoreConfidence } = await import('../src/confidence.js');
+    vi.mocked(scoreConfidence).mockReturnValue({ level: 'low', score: 0.1 });
+    const { buildCitations, buildSystemPrompt } = await import('../src/prompt.js');
+    const sent = [{ title: 'web', url: 'https://w' }, { title: 'doc', url: 'https://d' }];
+    vi.mocked(buildCitations).mockReturnValue(sent);
+
+    let calls = 0;
+    vi.mocked(streamChat).mockImplementation(async () => {
+      calls++;
+      if (calls === 1) throw new nRouterGuardrailBlockedError('blocked', {} as any);
+      return { cost: { costUsd: null, status: 'unpriced' }, chunks: (async function* () { yield 'ok'; })() };
+    });
+
+    const agent = createSupportAgent({ client: fakeClient, model: 'm', knowledge: fakeIndex, webSearch: { label: 'B', search: vi.fn() } });
+    for await (const _ of agent.chat({ messages: [{ role: 'user', content: 'hi' }] })) { /* drain */ }
+
+    const retryInput = vi.mocked(buildSystemPrompt).mock.calls.at(-1)![0];
+    expect(retryInput.webSources).toBeUndefined();
+    expect(retryInput.citations).toEqual(sent);
   });
 
   it('guardrail retry once', async () => {

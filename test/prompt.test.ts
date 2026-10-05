@@ -71,10 +71,40 @@ describe('buildCitations', () => {
       { title: 'Doc A', url: 'https://docs.acme.com/a', snippet: 'A3' },
     ];
     const citations = buildCitations(chunks, webSources);
+    // Web sources lead; a URL both lists share is kept once, at its first position.
     expect(citations).toEqual([
-      { title: 'Doc A', url: 'https://docs.acme.com/a' },
       { title: 'Doc C', url: 'https://docs.acme.com/c' },
+      { title: 'Doc A', url: 'https://docs.acme.com/a' },
     ]);
+  });
+
+  it('lists web sources first on a searched turn, and the prompt numbers them the same way', () => {
+    const chunks: ScoredChunk[] = [
+      { id: '1', title: 'Unrelated doc', url: 'https://docs.acme.com/unrelated', content: 'A', similarity: 0.2 },
+    ];
+    const webSources: WebSource[] = [{ title: 'nodejs.org', url: 'https://nodejs.org/lts', snippet: 'Node 24 is LTS' }];
+
+    expect(buildCitations(chunks, webSources).map(c => c.url)).toEqual([
+      'https://nodejs.org/lts',
+      'https://docs.acme.com/unrelated',
+    ]);
+
+    const prompt = buildSystemPrompt({ agentName: 'Bot', instructions: '', chunks, webSources });
+    expect(prompt).toContain('[1] Title: nodejs.org');
+    expect(prompt).toContain('[2] Title: Unrelated doc');
+  });
+
+  it('numbers a rebuilt prompt by the citations the visitor was already sent', () => {
+    const chunks: ScoredChunk[] = [
+      { id: '1', title: 'Unrelated doc', url: 'https://docs.acme.com/unrelated', content: 'A', similarity: 0.2 },
+    ];
+    const webSources: WebSource[] = [{ title: 'nodejs.org', url: 'https://nodejs.org/lts', snippet: 'Node 24 is LTS' }];
+    const sent = buildCitations(chunks, webSources);
+
+    // The retry drops the web sources; the doc must keep the number it was sent with.
+    const retry = buildSystemPrompt({ agentName: 'Bot', instructions: '', chunks, webSources: undefined, citations: sent });
+    expect(retry).toContain('[2] Title: Unrelated doc');
+    expect(retry).not.toContain('nodejs.org');
   });
 
   it('caps at 8 citations', () => {

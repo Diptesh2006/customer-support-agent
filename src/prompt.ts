@@ -7,6 +7,11 @@ export interface PromptInput {
   pageContext?: string | null;
   chunks: ScoredChunk[];
   webSources?: WebSource[];
+  /**
+   * The citation list the visitor was already sent. Give it when rebuilding a
+   * prompt with fewer sources, so every `[n]` still points at the same entry.
+   */
+  citations?: Citation[];
 }
 
 function neutralize(text: string): string {
@@ -62,7 +67,7 @@ ${neutralize(input.pageContext)}
   }
 
   // Citations mapping for numbering
-  const citations = buildCitations(input.chunks, input.webSources);
+  const citations = input.citations ?? buildCitations(input.chunks, input.webSources);
   const getCiteIdx = (url: string) => {
     const cleanUrl = sanitizeField(url, 500);
     const idx = citations.findIndex(c => c.url === cleanUrl);
@@ -94,7 +99,11 @@ ${neutralize(input.pageContext)}
   return parts.join('\n\n');
 }
 
-/** Citations in retrieval order then web order, de-duplicated by URL, http(s) only. Cap 8. */
+/**
+ * Citations, de-duplicated by URL, http(s) only, cap 8. Web sources lead when
+ * there are any: the web is only searched when retrieval was not confident, so
+ * on such a turn the pages the answer rests on come before the weak doc matches.
+ */
 export function buildCitations(chunks: ScoredChunk[], webSources?: WebSource[]): Citation[] {
   const citations: Citation[] = [];
   const seenUrls = new Set<string>();
@@ -108,14 +117,14 @@ export function buildCitations(chunks: ScoredChunk[], webSources?: WebSource[]):
     citations.push({ title: sanitizeField(title, 200), url: cleanUrl });
   };
 
-  for (const c of chunks) {
-    addSource(c.title, c.url);
-  }
-
   if (webSources) {
     for (const w of webSources) {
       addSource(w.title, w.url);
     }
+  }
+
+  for (const c of chunks) {
+    addSource(c.title, c.url);
   }
 
   return citations;

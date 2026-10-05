@@ -104,7 +104,20 @@ export interface WebSearchProvider {
    * still streams.
    */
   readonly timeoutMs?: number;
-  search(query: string, opts: { maxResults: number; signal?: AbortSignal }): Promise<WebSource[]>;
+  /**
+   * True when every search this provider completes comes back with its cost.
+   * A search by such a provider that fails or runs out of time after it was
+   * sent may still have been charged, so the turn's total becomes unpriced
+   * rather than silently leaving the search out.
+   */
+  readonly reportsCost?: boolean;
+  search(query: string, opts: { maxResults: number; signal?: AbortSignal }): Promise<WebSource[] | WebSearchResult>;
+}
+
+/** Sources plus what the search itself cost, for a provider that knows. */
+export interface WebSearchResult {
+  sources: WebSource[];
+  cost?: CostEvent;
 }
 
 // ---------------------------------------------------------------------------
@@ -139,6 +152,13 @@ export interface CostEvent {
   costUsd: number | null;
   status: 'exact' | 'unpriced';
   requestId?: string;
+  /**
+   * Present only on a turn whose web search has a cost to account for; then
+   * `costUsd` covers the answer and the search together (not the question's
+   * embedding call). Each part is USD, or null when that part is unknown.
+   */
+  chatCostUsd?: number | null;
+  searchCostUsd?: number | null;
 }
 
 export interface ToolCallEvent {
@@ -308,7 +328,7 @@ export type AgentEvent =
   | { type: 'token'; text: string }
   | { type: 'suggestions'; questions: string[] }
   | { type: 'action'; action: 'book_meeting'; url: string; label: string }
-  | { type: 'cost'; costUsd: number | null; status: 'exact' | 'unpriced'; requestId?: string }
+  | { type: 'cost'; costUsd: number | null; status: 'exact' | 'unpriced'; requestId?: string; chatCostUsd?: number | null; searchCostUsd?: number | null }
   | { type: 'error'; code: SupportAgentErrorCode; message: string }
   | { type: 'done' };
 

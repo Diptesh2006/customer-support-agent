@@ -2,18 +2,25 @@ import { describe, it, expect } from 'vitest';
 import { nRouter } from '@nrouter_ai/sdk';
 import { createNRouterWebSearch } from '../src/nrouter-web-search.js';
 import { SupportAgentError } from '../src/errors.js';
+import type { WebSearchProvider, WebSource } from '../src/types.js';
 
 type Call = Record<string, unknown>;
 
-function fakeClient(body: unknown, calls: Call[] = []): nRouter {
+function fakeClient(body: unknown, calls: Call[] = [], meta: Record<string, unknown> = {}): nRouter {
   const client = Object.create(nRouter.prototype);
   client.nr = {
     chat: async (opts: Call) => {
       calls.push(opts);
-      return { body, meta: {} };
+      return { body, meta };
     },
   };
   return client;
+}
+
+/** The provider's sources, whichever of the two result shapes it used. */
+async function sourcesOf(provider: WebSearchProvider, query: string, maxResults: number): Promise<WebSource[]> {
+  const result = await provider.search(query, { maxResults });
+  return Array.isArray(result) ? result : result.sources;
 }
 
 const grounded = {
@@ -52,7 +59,7 @@ describe('createNRouterWebSearch', () => {
 
   it('maps url citations to sources, de-duplicated by url', async () => {
     const provider = createNRouterWebSearch({ client: fakeClient(grounded) });
-    const sources = await provider.search('latest node lts', { maxResults: 5 });
+    const sources = await sourcesOf(provider, 'latest node lts', 5);
 
     expect(sources.map(s => s.url)).toEqual([
       'https://nodejs.org/en/about/previous-releases',
@@ -66,13 +73,27 @@ describe('createNRouterWebSearch', () => {
 
   it('honours maxResults', async () => {
     const provider = createNRouterWebSearch({ client: fakeClient(grounded) });
-    expect(await provider.search('q', { maxResults: 1 })).toHaveLength(1);
+    expect(await sourcesOf(provider, 'q', 1)).toHaveLength(1);
   });
 
   it('returns no sources when the answer cites none', async () => {
     const body = { choices: [{ message: { content: 'I do not know.' } }] };
     const provider = createNRouterWebSearch({ client: fakeClient(body) });
-    expect(await provider.search('q', { maxResults: 5 })).toEqual([]);
+    expect(await sourcesOf(provider, 'q', 5)).toEqual([]);
+  });
+
+  it('reports what the gateway charged for the search', async () => {
+    const meta = { cost: 0.029, costStatus: 'exact', requestId: 'req_search' };
+    const provider = createNRouterWebSearch({ client: fakeClient(grounded, [], meta) });
+    const result = await provider.search('q', { maxResults: 5 });
+    expect(Array.isArray(result)).toBe(false);
+    expect((result as { cost?: unknown }).cost).toEqual({ costUsd: 0.029, status: 'exact', requestId: 'req_search' });
+  });
+
+  it('reports an unpriced search as unpriced, never as zero', async () => {
+    const provider = createNRouterWebSearch({ client: fakeClient(grounded, [], { cost: null, costStatus: 'unpriced' }) });
+    const result = await provider.search('q', { maxResults: 5 });
+    expect((result as { cost?: unknown }).cost).toEqual({ costUsd: null, status: 'unpriced' });
   });
 
   it('ignores malformed annotations and non-http urls', async () => {
@@ -92,7 +113,7 @@ describe('createNRouterWebSearch', () => {
       ],
     };
     const provider = createNRouterWebSearch({ client: fakeClient(body) });
-    const sources = await provider.search('q', { maxResults: 5 });
+    const sources = await sourcesOf(provider, 'q', 5);
     expect(sources).toEqual([{ title: 'ok.example', url: 'https://ok.example/a', snippet: 'answer' }]);
   });
 

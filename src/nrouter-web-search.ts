@@ -36,7 +36,8 @@ function hostOf(url: string): string {
 
 /**
  * Web search through the gateway's own search grounding: one SDK call, billed
- * to the same key, no second vendor. Returns the pages the answer cites.
+ * to the same key, no second vendor. Returns the pages the answer cites and
+ * what the gateway charged for the call.
  */
 export function createNRouterWebSearch(options: NRouterWebSearchOptions): WebSearchProvider {
   if (!options.client && !options.apiKey) {
@@ -48,6 +49,7 @@ export function createNRouterWebSearch(options: NRouterWebSearchOptions): WebSea
   return {
     label: options.label ?? DEFAULT_WEB_SEARCH_LABEL,
     ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
+    reportsCost: true,
     async search(query, opts) {
       const answer = await groundedSearch(client, {
         model,
@@ -71,7 +73,7 @@ export function createNRouterWebSearch(options: NRouterWebSearchOptions): WebSea
           snippet: sources.length === 0 ? answer.text : span || answer.text,
         });
       }
-      return sources;
+      return { sources, cost: answer.cost };
     },
   };
 }

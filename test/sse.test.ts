@@ -33,6 +33,18 @@ describe('encodeEvent', () => {
     expect(encodeEvent(ev)).toBe('data: {"nrouter_event":"cost","costUsd":0.05,"status":"exact","requestId":"req123"}\n\n');
   });
 
+  it('encodes the chat and search parts of a searched turn', () => {
+    const exact: AgentEvent = { type: 'cost', costUsd: 0.08, status: 'exact', chatCostUsd: 0.05, searchCostUsd: 0.03 };
+    expect(encodeEvent(exact)).toBe(
+      'data: {"nrouter_event":"cost","costUsd":0.08,"status":"exact","chatCostUsd":0.05,"searchCostUsd":0.03}\n\n',
+    );
+    // An unknown part is null, so an unpriced total does not hide the part that is known.
+    const unknown: AgentEvent = { type: 'cost', costUsd: null, status: 'unpriced', chatCostUsd: 0.05, searchCostUsd: null };
+    expect(encodeEvent(unknown)).toBe(
+      'data: {"nrouter_event":"cost","status":"unpriced","chatCostUsd":0.05,"searchCostUsd":null}\n\n',
+    );
+  });
+
   it('encodes cost unpriced (no costUsd)', () => {
     const ev: AgentEvent = { type: 'cost', costUsd: null, status: 'unpriced' };
     expect(encodeEvent(ev)).toBe('data: {"nrouter_event":"cost","status":"unpriced"}\n\n');

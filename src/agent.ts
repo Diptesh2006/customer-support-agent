@@ -5,7 +5,8 @@ import { validateChatRequest, validateTrustedContext } from './limits.js';
 import { latestQuestion, normalizeQuestion } from './gaps.js';
 import { retrieve } from './retrieval.js';
 import { scoreConfidence } from './confidence.js';
-import { runWebSearch } from './web-search.js';
+import { runWebSearchDetailed } from './web-search.js';
+import { addSearchCost } from './cost.js';
 import { buildCitations, buildSystemPrompt } from './prompt.js';
 import { sanitizePageContext } from './page-context.js';
 import { runToolPhase } from './tools.js';
@@ -32,11 +33,14 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       
       let webSources;
       let webSearched = false;
+      let searchCost: CostEvent | 'unknown' | undefined;
       if (conf.level === 'low' && cfg.webSearch) {
         webSearched = true;
         yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'running' };
         try {
-          webSources = await runWebSearch(cfg.webSearch, question, { signal: validatedReq.signal, timeoutMs: cfg.webSearch.timeoutMs });
+          const searched = await runWebSearchDetailed(cfg.webSearch, question, { signal: validatedReq.signal, timeoutMs: cfg.webSearch.timeoutMs });
+          webSources = searched.sources;
+          searchCost = searched.cost;
           yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'done' };
         } catch (err) {
           yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'error' };
@@ -141,6 +145,15 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
          }
       }
 
+      // The answer failed, but a search already ran and was billed: report that
+      // part. What the failed answer cost is unknown, so the total is too.
+      function* searchOnlyCost(): Generator<AgentEvent> {
+         if (searchCost === undefined) return;
+         const turnCost = addSearchCost({ costUsd: null, status: 'unpriced' }, searchCost);
+         yield { type: 'cost', costUsd: null, status: 'unpriced', chatCostUsd: turnCost.chatCostUsd, searchCostUsd: turnCost.searchCostUsd };
+         if (cfg.hooks.onCost) callHook(cfg.hooks, 'onCost', turnCost);
+      }
+
       try {
          yield* answer(system);
       } catch (err: any) {
@@ -152,18 +165,22 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
               identity: validatedCtx.identity,
               pageContext: sanitizePageContext(validatedReq.pageContext, cfg.limits.maxPageContextChars),
               chunks,
-              webSources: undefined
+              webSources: undefined,
+              // The visitor already has the citation list; keep its numbering.
+              citations
             });
             try {
                yield* answer(systemRetry);
             } catch (retryErr: any) {
                const safeRetryErr = toSafeError(retryErr, config.apiKey ? [config.apiKey] : undefined);
                yield { type: 'error', code: safeRetryErr.code, message: safeRetryErr.message };
+               yield* searchOnlyCost();
                yield { type: 'done' };
                return;
             }
          } else {
             yield { type: 'error', code: safeErr.code, message: safeErr.message };
+            yield* searchOnlyCost();
             yield { type: 'done' };
             return;
          }
@@ -181,9 +198,18 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       }
 
       if (costEvent) {
-         yield { type: 'cost', costUsd: costEvent.costUsd, status: costEvent.status, requestId: costEvent.requestId };
+         // The search is a second billed call; count it with the answer.
+         const turnCost = addSearchCost(costEvent, searchCost);
+         yield {
+            type: 'cost',
+            costUsd: turnCost.costUsd,
+            status: turnCost.status,
+            requestId: turnCost.requestId,
+            ...(turnCost.chatCostUsd !== undefined ? { chatCostUsd: turnCost.chatCostUsd } : {}),
+            ...(turnCost.searchCostUsd !== undefined ? { searchCostUsd: turnCost.searchCostUsd } : {}),
+         };
          if (cfg.hooks.onCost) {
-            callHook(cfg.hooks, 'onCost', costEvent);
+            callHook(cfg.hooks, 'onCost', turnCost);
          }
       }
 

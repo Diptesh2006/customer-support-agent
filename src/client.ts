@@ -88,6 +88,8 @@ export interface GroundedAnswer {
   text: string;
   /** `start`/`end` index into `text` when the gateway reports the cited span. */
   citations: Array<{ title: string; url: string; start?: number; end?: number }>;
+  /** What the gateway charged for this search call. */
+  cost: CostEvent;
 }
 
 /**
@@ -123,7 +125,7 @@ export async function groundedSearch(
       ...(Number.isInteger(c.end_index) ? { end: c.end_index as number } : {}),
     });
   }
-  return { text, citations };
+  return { text, citations, cost: costFromMeta(res.meta) };
 }
 
 /** Map SDK ResponseMeta to a CostEvent. Unpriced → costUsd null, never 0. */

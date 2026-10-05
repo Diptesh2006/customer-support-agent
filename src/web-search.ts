@@ -1,7 +1,14 @@
 import type { AgentTool } from '@nrouter_ai/sdk';
-import type { WebSearchProvider, WebSource } from './types.js';
+import type { CostEvent, WebSearchProvider, WebSource } from './types.js';
 
 export const WEB_SEARCH_TOOL_ID = 'web_search';
+
+/** What a bounded search produced, and what is known about its cost. */
+export interface BoundedSearch {
+  sources: WebSource[];
+  /** The provider's reported cost; `'unknown'` when a cost-reporting provider was called and reported none. */
+  cost?: CostEvent | 'unknown';
+}
 
 /** Bounded search: timeout, max results, http(s) URLs only, snippets capped. Failures return []. */
 export async function runWebSearch(
@@ -9,6 +16,15 @@ export async function runWebSearch(
   query: string,
   opts?: { maxResults?: number; timeoutMs?: number; signal?: AbortSignal },
 ): Promise<WebSource[]> {
+  return (await runWebSearchDetailed(provider, query, opts)).sources;
+}
+
+/** `runWebSearch`, also carrying the search's cost. A failure has no sources; it may still have a cost. */
+export async function runWebSearchDetailed(
+  provider: WebSearchProvider,
+  query: string,
+  opts?: { maxResults?: number; timeoutMs?: number; signal?: AbortSignal },
+): Promise<BoundedSearch> {
   const maxResults = Math.min(opts?.maxResults ?? 5, 10);
   const timeoutMs = opts?.timeoutMs ?? 8000;
 
@@ -17,7 +33,8 @@ export async function runWebSearch(
   
   if (opts?.signal) {
     if (opts.signal.aborted) {
-      return [];
+      // Never sent, so nothing was charged.
+      return { sources: [] };
     }
     const abortHandler = () => abortController.abort();
     opts.signal.addEventListener('abort', abortHandler);
@@ -29,13 +46,15 @@ export async function runWebSearch(
 
   try {
     const searchPromise = provider.search(query, { maxResults, signal: abortController.signal });
-    const timeoutPromise = new Promise<WebSource[]>((_, reject) => {
+    const timeoutPromise = new Promise<never>((_, reject) => {
       const tid = setTimeout(() => reject(new Error('timeout')), timeoutMs);
       cleanupFns.push(() => clearTimeout(tid));
     });
 
-    const results = await Promise.race([searchPromise, timeoutPromise]);
-    return results
+    const result = await Promise.race([searchPromise, timeoutPromise]);
+    const found = Array.isArray(result) ? result : result.sources;
+    const reported = Array.isArray(result) ? undefined : result.cost;
+    const sources = found
       .filter(r => r.url.startsWith('http://') || r.url.startsWith('https://'))
       .slice(0, maxResults)
       .map(r => ({
@@ -43,8 +62,11 @@ export async function runWebSearch(
         url: r.url,
         snippet: r.snippet.substring(0, 500),
       }));
+    const cost = reported ?? (provider.reportsCost ? 'unknown' as const : undefined);
+    return cost === undefined ? { sources } : { sources, cost };
   } catch (err) {
-    return [];
+    // Sent, and no settlement came back: a provider that reports cost may have been charged.
+    return provider.reportsCost ? { sources: [], cost: 'unknown' } : { sources: [] };
   } finally {
     cleanupFns.forEach(fn => fn());
   }

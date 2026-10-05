@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { runWebSearch, createWebSearchTool, WEB_SEARCH_TOOL_ID } from '../src/web-search.js';
+import { runWebSearch, runWebSearchDetailed, createWebSearchTool, WEB_SEARCH_TOOL_ID } from '../src/web-search.js';
 import type { WebSearchProvider } from '../src/types.js';
 
 describe('runWebSearch', () => {
@@ -73,6 +73,69 @@ describe('runWebSearch', () => {
     expect(result[0]!.title.length).toBe(200);
     expect(result[0]!.snippet.length).toBe(500);
     expect(result[1]!.url).toBe('http://example.org');
+  });
+});
+
+describe('runWebSearchDetailed', () => {
+  it('carries the cost a provider reports beside its sources', async () => {
+    const provider: WebSearchProvider = {
+      label: 'test',
+      search: async () => ({
+        sources: [{ title: 't', url: 'https://u', snippet: 's' }],
+        cost: { costUsd: 0.03, status: 'exact' as const, requestId: 'r' },
+      }),
+    };
+    const result = await runWebSearchDetailed(provider, 'q');
+    expect(result.sources).toEqual([{ title: 't', url: 'https://u', snippet: 's' }]);
+    expect(result.cost).toEqual({ costUsd: 0.03, status: 'exact', requestId: 'r' });
+  });
+
+  it('reports no cost for a provider that returns a bare list', async () => {
+    const provider: WebSearchProvider = { label: 'test', search: async () => [{ title: 't', url: 'https://u', snippet: 's' }] };
+    const result = await runWebSearchDetailed(provider, 'q');
+    expect(result.sources).toHaveLength(1);
+    expect(result.cost).toBeUndefined();
+  });
+
+  it('a failed search by a provider that reports no cost has no sources and no cost', async () => {
+    const provider: WebSearchProvider = { label: 'test', search: async () => { throw new Error('boom'); } };
+    expect(await runWebSearchDetailed(provider, 'q')).toEqual({ sources: [] });
+  });
+
+  it('keeps the cost of a search whose sources were all unusable', async () => {
+    const provider: WebSearchProvider = {
+      label: 'test',
+      reportsCost: true,
+      search: async () => ({ sources: [{ title: 't', url: 'ftp://nope', snippet: 's' }], cost: { costUsd: 0.03, status: 'exact' as const } }),
+    };
+    expect(await runWebSearchDetailed(provider, 'q')).toEqual({ sources: [], cost: { costUsd: 0.03, status: 'exact' } });
+  });
+
+  it('a cost-reporting provider that fails after dispatch leaves the charge unknown', async () => {
+    const provider: WebSearchProvider = { label: 'test', reportsCost: true, search: async () => { throw new Error('boom'); } };
+    expect(await runWebSearchDetailed(provider, 'q')).toEqual({ sources: [], cost: 'unknown' });
+  });
+
+  it('a cost-reporting provider that times out leaves the charge unknown', async () => {
+    const provider: WebSearchProvider = { label: 'test', reportsCost: true, search: () => new Promise(() => {}) };
+    expect(await runWebSearchDetailed(provider, 'q', { timeoutMs: 20 })).toEqual({ sources: [], cost: 'unknown' });
+  });
+
+  it('a search that never dispatched, because the request was already aborted, costs nothing', async () => {
+    let called = false;
+    const provider: WebSearchProvider = { label: 'test', reportsCost: true, search: async () => { called = true; return []; } };
+    const controller = new AbortController();
+    controller.abort();
+    expect(await runWebSearchDetailed(provider, 'q', { signal: controller.signal })).toEqual({ sources: [] });
+    expect(called).toBe(false);
+  });
+
+  it('runWebSearch still returns just the sources', async () => {
+    const provider: WebSearchProvider = {
+      label: 'test',
+      search: async () => ({ sources: [{ title: 't', url: 'https://u', snippet: 's' }], cost: { costUsd: 0.03, status: 'exact' as const } }),
+    };
+    expect(await runWebSearch(provider, 'q')).toEqual([{ title: 't', url: 'https://u', snippet: 's' }]);
   });
 });
 

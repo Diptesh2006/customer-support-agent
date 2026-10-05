@@ -38,16 +38,16 @@ export function encodeEvent(ev: AgentEvent): string {
         url: ev.url,
         label: ev.label
       })}\n\n`;
-    case 'cost':
-      if (ev.status === 'exact') {
-        const payload: any = { nrouter_event: 'cost', costUsd: ev.costUsd, status: 'exact' };
-        if (ev.requestId !== undefined) payload.requestId = ev.requestId;
-        return `data: ${JSON.stringify(payload)}\n\n`;
-      } else {
-        const payload: any = { nrouter_event: 'cost', status: 'unpriced' };
-        if (ev.requestId !== undefined) payload.requestId = ev.requestId;
-        return `data: ${JSON.stringify(payload)}\n\n`;
-      }
+    case 'cost': {
+      const payload: any = ev.status === 'exact'
+        ? { nrouter_event: 'cost', costUsd: ev.costUsd, status: 'exact' }
+        : { nrouter_event: 'cost', status: 'unpriced' };
+      if (ev.requestId !== undefined) payload.requestId = ev.requestId;
+      // The parts of a searched turn; null is "unknown", so it is sent, not dropped.
+      if (ev.chatCostUsd !== undefined) payload.chatCostUsd = ev.chatCostUsd;
+      if (ev.searchCostUsd !== undefined) payload.searchCostUsd = ev.searchCostUsd;
+      return `data: ${JSON.stringify(payload)}\n\n`;
+    }
     case 'error':
       return `data: ${JSON.stringify({
         nrouter_event: 'error',

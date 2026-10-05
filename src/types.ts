@@ -72,6 +72,8 @@ export interface BuildIndexOptions {
   dimensions?: number;
   /** Texts per embeddings request. */
   batchSize?: number;
+  /** Most text, in characters, sent in one embedding request (default 16000). A single larger chunk still goes alone. */
+  maxBatchChars?: number;
   signal?: AbortSignal;
   /** Mask emails and phone numbers before text leaves the process (default true). */
   maskPii?: boolean;

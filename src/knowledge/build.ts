@@ -7,11 +7,14 @@ import { embed } from '../client.js';
 export const DEFAULT_EMBEDDING_MODEL = 'text-embedding-3-small';
 export const DEFAULT_EMBEDDING_DIMENSIONS = 768;
 export const DEFAULT_EMBED_BATCH = 64;
+/** About 5,300 tokens on a conservative count: inside the 8k input limit common to embedding models. */
+export const DEFAULT_EMBED_BATCH_CHARS = 16_000;
 
 export async function buildKnowledgeIndex(opts: BuildIndexOptions): Promise<KnowledgeIndex> {
   const embeddingModel = opts.embeddingModel || DEFAULT_EMBEDDING_MODEL;
   const dimensions = opts.dimensions || DEFAULT_EMBEDDING_DIMENSIONS;
   const batchSize = opts.batchSize || DEFAULT_EMBED_BATCH;
+  const maxBatchChars = opts.maxBatchChars || DEFAULT_EMBED_BATCH_CHARS;
   const maskPii = opts.maskPii;
   const skipBlocked = opts.skipBlocked ?? false;
 
@@ -31,12 +34,28 @@ export async function buildKnowledgeIndex(opts: BuildIndexOptions): Promise<Know
   let chunks: KnowledgeChunk[] = [];
   const skippedDocUrls = new Set<string>();
 
-  for (let i = 0; i < baseChunks.length; i += batchSize) {
+  // A request is bounded by chunk count AND by text size: embedding models cap the
+  // input of one request, and 64 full-size chunks is several times that cap.
+  const ranges: Array<[number, number]> = [];
+  for (let start = 0; start < baseChunks.length; ) {
+    let end = start;
+    let chars = 0;
+    while (end < baseChunks.length && end - start < batchSize) {
+      const size = baseChunks[end]!.content.length;
+      if (end > start && chars + size > maxBatchChars) break;
+      chars += size;
+      end++;
+    }
+    ranges.push([start, end]);
+    start = end;
+  }
+
+  for (const [from, to] of ranges) {
     if (opts.signal?.aborted) {
       throw new SupportAgentError('aborted', 'build aborted');
     }
 
-    const rawBatch = baseChunks.slice(i, i + batchSize);
+    const rawBatch = baseChunks.slice(from, to);
     const batch = skipBlocked ? rawBatch.filter(c => !skippedDocUrls.has(c.url)) : rawBatch;
     if (batch.length === 0) {
       continue;

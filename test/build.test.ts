@@ -53,6 +53,41 @@ describe('buildKnowledgeIndex', () => {
     expect(batches).toEqual([2, 2, 1]);
   });
 
+  it('keeps each request under a text budget, so a large doc set does not exceed the model input limit', async () => {
+    const sizes: number[] = [];
+    const client = {
+      embeddings: {
+        create: vi.fn().mockImplementation(async (opts) => {
+          sizes.push(opts.input.reduce((n: number, s: string) => n + s.length, 0));
+          return { data: opts.input.map(() => ({ embedding: [0.1, 0.2] })) };
+        })
+      }
+    } as any;
+
+    const docs = Array.from({ length: 6 }, (_, i) => ({ title: `Doc ${i}`, url: `http://example.com/${i}`, content: 'word '.repeat(180) }));
+    const index = await buildKnowledgeIndex({ docs, client, dimensions: 2, maxBatchChars: 2000 });
+
+    expect(index.chunks).toHaveLength(6);
+    expect(sizes.length).toBeGreaterThan(1);
+    for (const size of sizes) expect(size).toBeLessThanOrEqual(2000);
+  });
+
+  it('by default stays well inside an 8k-token embedding input limit', async () => {
+    const sizes: number[] = [];
+    const client = {
+      embeddings: {
+        create: vi.fn().mockImplementation(async (opts) => {
+          sizes.push(opts.input.reduce((n: number, s: string) => n + s.length, 0));
+          return { data: opts.input.map(() => ({ embedding: [0.1, 0.2] })) };
+        })
+      }
+    } as any;
+    const docs = Array.from({ length: 40 }, (_, i) => ({ title: `Doc ${i}`, url: `http://example.com/${i}`, content: 'word '.repeat(230) }));
+    await buildKnowledgeIndex({ docs, client, dimensions: 2 });
+    // ~3 characters a token on a conservative count: 16,000 characters is about 5,300 tokens.
+    for (const size of sizes) expect(size).toBeLessThanOrEqual(16_000);
+  });
+
   it('propagates abort signal (before embed)', async () => {
     const client = { embeddings: { create: vi.fn() } } as any;
     const controller = new AbortController();

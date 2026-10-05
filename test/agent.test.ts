@@ -255,6 +255,43 @@ describe('SupportAgent', () => {
       expect(vi.mocked(buildSystemPrompt).mock.calls[0]![0].missMarker).toBeUndefined();
     });
 
+    it('a failed second answer still reports a cost: the first reply was billed', async () => {
+      const { streamChat } = await import('../src/client.js');
+      const { scoreConfidence } = await import('../src/confidence.js');
+      const { runWebSearchDetailed } = await import('../src/web-search.js');
+      vi.mocked(scoreConfidence).mockReturnValue({ level: 'high', score: 0.6 });
+      vi.mocked(runWebSearchDetailed).mockResolvedValueOnce({ sources: [] });
+      let n = 0;
+      vi.mocked(streamChat).mockImplementation(async () => {
+        if (n++ === 0) return once(MARK);
+        throw new Error('upstream down');
+      });
+      const agent = createSupportAgent({ client: fakeClient, model: 'm', knowledge: fakeIndex, webSearch: { label: 's', search: vi.fn() } });
+      const events: any[] = [];
+      for await (const ev of agent.chat({ messages: [{ role: 'user', content: 'q' }] })) events.push(ev);
+      expect(events.map(e => e.type).slice(-3)).toEqual(['error', 'cost', 'done']);
+      // What the failed answer cost is unknown, so the total is; it is never silently nothing.
+      expect(events.find(e => e.type === 'cost')).toMatchObject({ costUsd: null, status: 'unpriced', chatCostUsd: null });
+    });
+
+    it('a first reply with no price makes the total unpriced, never a falsely exact one', async () => {
+      const { runWebSearchDetailed } = await import('../src/web-search.js');
+      vi.mocked(runWebSearchDetailed).mockResolvedValueOnce({ sources: [] });
+      const unpricedMarker = { cost: undefined as any, chunks: (async function* () { yield MARK; })() };
+      const { events } = await run({ webSearch: { label: 's', search: vi.fn() } }, unpricedMarker as any, once('second'));
+      expect(events.find(e => e.type === 'cost')).toMatchObject({ costUsd: null, status: 'unpriced' });
+    });
+
+    it('a search that throws does not cost the visitor their answer', async () => {
+      const { runWebSearchDetailed } = await import('../src/web-search.js');
+      vi.mocked(runWebSearchDetailed).mockRejectedValueOnce(new Error('search broke'));
+      const { events, text } = await run({ webSearch: { label: 's', search: vi.fn() } }, once(MARK), once('The docs do not cover that.'));
+      expect(events.filter(e => e.type === 'tool_call').map(e => e.status)).toEqual(['running', 'error']);
+      expect(text).toBe('The docs do not cover that.');
+      expect(events.at(-1).type).toBe('done');
+      expect(events.some(e => e.type === 'error')).toBe(false);
+    });
+
     it('when the provider gate refuses the search, it answers again without searching', async () => {
       const { runWebSearchDetailed, searchAllowed } = await import('../src/web-search.js');
       vi.mocked(runWebSearchDetailed).mockClear();

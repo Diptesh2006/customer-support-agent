@@ -159,7 +159,8 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
                   yield { type: 'token', text: chunk };
                }
                if (missed) {
-                  if (sResult.cost) unseenAnswerCosts.push(sResult.cost);
+                  // A reply with no price is still a billed call: count it as unknown, never leave it out.
+                  unseenAnswerCosts.push(sResult.cost ?? { costUsd: null, status: 'unpriced' });
                   docsMissed = true;
                   return;
                }
@@ -186,9 +187,18 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       // The answer failed, but a search already ran and was billed: report that
       // part. What the failed answer cost is unknown, so the total is too.
       function* searchOnlyCost(): Generator<AgentEvent> {
-         if (searchCost === undefined) return;
-         const turnCost = addSearchCost({ costUsd: null, status: 'unpriced' }, searchCost);
-         yield { type: 'cost', costUsd: null, status: 'unpriced', chatCostUsd: turnCost.chatCostUsd, searchCostUsd: turnCost.searchCostUsd };
+         // Nothing else was billed before the failure: nothing to report.
+         if (searchCost === undefined && unseenAnswerCosts.length === 0) return;
+         const turnCost: CostEvent = searchCost === undefined
+            ? { costUsd: null, status: 'unpriced', chatCostUsd: null }
+            : addSearchCost({ costUsd: null, status: 'unpriced' }, searchCost);
+         yield {
+            type: 'cost',
+            costUsd: null,
+            status: 'unpriced',
+            chatCostUsd: turnCost.chatCostUsd,
+            ...(turnCost.searchCostUsd !== undefined ? { searchCostUsd: turnCost.searchCostUsd } : {}),
+         };
          if (cfg.hooks.onCost) callHook(cfg.hooks, 'onCost', turnCost);
       }
 
@@ -198,11 +208,18 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
             if (searchAllowed(cfg.webSearch, question)) {
                webSearched = true;
                yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'running' };
-               const searched = await runWebSearchDetailed(cfg.webSearch, question, { signal: validatedReq.signal, timeoutMs: cfg.webSearch.timeoutMs });
-               webSources = searched.sources;
-               searchCost = searched.cost;
-               yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'done' };
-               if (webSources.length > 0) {
+               try {
+                  const searched = await runWebSearchDetailed(cfg.webSearch, question, { signal: validatedReq.signal, timeoutMs: cfg.webSearch.timeoutMs });
+                  webSources = searched.sources;
+                  searchCost = searched.cost;
+                  yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'done' };
+               } catch {
+                  // The first reply was held back, so the visitor has nothing yet: a broken
+                  // search must not also cost them the answer. A sent search may have been charged.
+                  if (cfg.webSearch.reportsCost) searchCost = 'unknown';
+                  yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'error' };
+               }
+               if (webSources && webSources.length > 0) {
                   // The list the visitor holds changes: web sources now lead it.
                   citations = buildCitations(chunks, webSources);
                   yield { type: 'citations', citations };

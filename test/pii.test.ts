@@ -25,6 +25,18 @@ describe('maskPii', () => {
       expected: 'my email is [email]'
     },
 
+    // Virtual keys (sk-nrouter-*)
+    {
+      name: 'virtual key masking',
+      input: 'My key is ' + 'sk-nrouter-' + 'test-live-1234567890abcdef',
+      expected: 'My key is [virtual-key]'
+    },
+    {
+      name: 'virtual key in code snippet',
+      input: 'const key = "sk-nrouter-proj-998877";',
+      expected: 'const key = "[virtual-key]";'
+    },
+
     // Phone numbers (7+ digits with +, spaces, dots, dashes, parentheses)
     {
       name: 'us phone with parens and dash',

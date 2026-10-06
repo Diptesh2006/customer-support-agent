@@ -10,6 +10,32 @@ export const DEFAULT_EMBED_BATCH = 64;
 /** About 5,300 tokens on a conservative count: inside the 8k input limit common to embedding models. */
 export const DEFAULT_EMBED_BATCH_CHARS = 16_000;
 
+async function embedRetry(
+  client: any,
+  model: string,
+  input: string[],
+  dimensions: number,
+  signal?: AbortSignal,
+  opts?: { maskPii?: boolean; batchFallback?: boolean },
+): Promise<number[][]> {
+  let lastError: any;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      return await embed(client, model, input, dimensions, signal, opts);
+    } catch (err: any) {
+      lastError = err;
+      if (err?.name === 'AbortError' || signal?.aborted) throw err;
+      const msg = err?.message || '';
+      if (/503|temporarily unavailable|rate_limit|429/i.test(msg) && attempt < 2) {
+        await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
 export async function buildKnowledgeIndex(opts: BuildIndexOptions): Promise<KnowledgeIndex> {
   const embeddingModel = opts.embeddingModel || DEFAULT_EMBEDDING_MODEL;
   const dimensions = opts.dimensions || DEFAULT_EMBEDDING_DIMENSIONS;
@@ -65,7 +91,7 @@ export async function buildKnowledgeIndex(opts: BuildIndexOptions): Promise<Know
 
     let vectors: number[][];
     try {
-      vectors = await embed(opts.client, embeddingModel, input, dimensions, opts.signal, { maskPii });
+      vectors = await embedRetry(opts.client, embeddingModel, input, dimensions, opts.signal, { maskPii, batchFallback: (opts as any).batchFallback });
       for (let j = 0; j < batch.length; j++) {
         const b = batch[j]!;
         chunks.push({
@@ -95,7 +121,7 @@ export async function buildKnowledgeIndex(opts: BuildIndexOptions): Promise<Know
           throw new SupportAgentError('aborted', 'build aborted');
         }
         try {
-          const singleVec = await embed(opts.client, embeddingModel, [c.content], dimensions, opts.signal, { maskPii });
+          const singleVec = await embedRetry(opts.client, embeddingModel, [c.content], dimensions, opts.signal, { maskPii, batchFallback: (opts as any).batchFallback });
           successfulInBatch.push({ chunk: c, vector: singleVec[0]! });
         } catch (chunkErr: any) {
           if (chunkErr?.name === 'AbortError' || opts.signal?.aborted) {

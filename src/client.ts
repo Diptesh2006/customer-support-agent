@@ -24,16 +24,34 @@ export async function embed(
   input: string[],
   dimensions: number,
   signal?: AbortSignal,
-  opts?: { maskPii?: boolean },
+  opts?: { maskPii?: boolean; batchFallback?: boolean },
 ): Promise<number[][]> {
   if (!input || input.length === 0) {
     return [];
   }
   const textsToEmbed = opts?.maskPii !== false ? input.map(t => maskPii(t)) : input;
   const res = await client.embeddings.create({ model, input: textsToEmbed, dimensions }, { signal });
-  const data = res.data.sort((a, b) => a.index - b.index);
+  let data = res.data.sort((a, b) => a.index - b.index);
   if (data.length !== input.length) {
-    throw new SupportAgentError('upstream_error', 'Embedding count mismatch');
+    if (opts?.batchFallback) {
+      const individual: typeof data = [];
+      for (let i = 0; i < textsToEmbed.length; i++) {
+        const singleRes = await client.embeddings.create(
+          { model, input: [textsToEmbed[i]!], dimensions },
+          { signal },
+        );
+        if (singleRes.data && singleRes.data[0]) {
+          individual.push({ ...singleRes.data[0], index: i });
+        }
+      }
+      if (individual.length === input.length) {
+        data = individual;
+      } else {
+        throw new SupportAgentError('upstream_error', 'Embedding count mismatch');
+      }
+    } else {
+      throw new SupportAgentError('upstream_error', 'Embedding count mismatch');
+    }
   }
   const result: number[][] = [];
   for (const d of data) {

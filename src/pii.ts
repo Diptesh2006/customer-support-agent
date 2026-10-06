@@ -1,14 +1,16 @@
 // Pure TypeScript PII masking module. No node: imports.
 
 const EMAIL_RE = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
+const VIRTUAL_KEY_RE = /sk-nrouter[^\s"'`()\]\}<>,;]*/g;
 
 // Matches candidate sequences of digits and phone punctuation bounded by non-word/currency chars or string edges.
 const PHONE_CANDIDATE_RE = /(^|[^\w\p{Sc}])(\+?(?:(?:\(\d+[\s.-]*\))|\d+)[\d\s().-]*\d)(?=[^\w]|$)/gu;
 
 /**
- * Mask PII (email addresses and phone numbers) in text before sending to the gateway.
+ * Mask PII (email addresses, virtual keys, and phone numbers) in text before sending to the gateway.
  * Email addresses -> `[email]`
  * Phone numbers (7+ digits with optional +, spaces, dots, dashes, parentheses) -> `[phone]`
+ * Virtual keys -> `[virtual-key]`
  * Does NOT touch ISO dates, versions like 1.2.3, prices, or short numbers such as "402" or "7731".
  */
 export function maskPii(text: string): string {
@@ -19,7 +21,10 @@ export function maskPii(text: string): string {
   // 1. Mask email addresses first so internal digits aren't mistaken for phone numbers
   let masked = text.replace(EMAIL_RE, '[email]');
 
-  // 2. Mask phone numbers
+  // 2. Mask virtual keys so code snippets don't trigger PreCall guardrails
+  masked = masked.replace(VIRTUAL_KEY_RE, '[virtual-key]');
+
+  // 3. Mask phone numbers
   masked = masked.replace(PHONE_CANDIDATE_RE, (match, prefix, candidate, offset, fullStr) => {
     // If preceded by URL scheme or slash, skip
     const beforeMatch = fullStr.slice(0, offset + prefix.length);

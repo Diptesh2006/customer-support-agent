@@ -67,6 +67,12 @@ describe('buildSystemPrompt — the docs-miss marker', () => {
     const prompt = buildSystemPrompt({ ...base, missMarker: '[[NOT_IN_DOCS]]' });
     expect(prompt).toContain('reply with exactly [[NOT_IN_DOCS]]');
   });
+
+  it('tells the model a greeting needs no context and is never a miss', () => {
+    expect(buildSystemPrompt(base)).toContain('If the message contains only a greeting, thanks or small talk, it is not a question');
+    const prompt = buildSystemPrompt({ ...base, missMarker: '[[NOT_IN_DOCS]]' });
+    expect(prompt).toContain('does not contain the answer to a real question');
+  });
 });
 
 describe('buildCitations', () => {

@@ -97,6 +97,63 @@ describe('SupportAgent', () => {
     expect(callHook).toHaveBeenCalledWith(expect.anything(), 'onGap', expect.objectContaining({ confidence: 'low', webSearched: true }));
   });
 
+  describe('a greeting is not a question', () => {
+    async function greet(level: 'low' | 'medium', config: Record<string, unknown> = {}) {
+      const { latestQuestion } = await import('../src/gaps.js');
+      vi.mocked(latestQuestion).mockReturnValueOnce('hi');
+      const { scoreConfidence } = await import('../src/confidence.js');
+      vi.mocked(scoreConfidence).mockReturnValue({ level, score: level === 'low' ? 0.1 : 0.4 });
+      const agent = createSupportAgent({
+        client: fakeClient, model: 'm', knowledge: fakeIndex,
+        webSearch: { label: 'B', search: vi.fn() },
+        ...config,
+      } as any);
+      const events: any[] = [];
+      for await (const ev of agent.chat({ messages: [{ role: 'user', content: 'hi' }] })) events.push(ev);
+      return events;
+    }
+
+    it('does not search on low confidence, and still answers', async () => {
+      const { runWebSearchDetailed } = await import('../src/web-search.js');
+      const events = await greet('low');
+
+      expect(runWebSearchDetailed).not.toHaveBeenCalled();
+      expect(events.some(e => e.type === 'tool_call')).toBe(false);
+      expect(events.find(e => e.type === 'confidence')).toMatchObject({ webSearched: false });
+      expect(events.filter(e => e.type === 'token').map(e => e.text).join('')).toBe('token1token2');
+    });
+
+    it('does not ask the model for the docs-miss marker', async () => {
+      const { buildSystemPrompt } = await import('../src/prompt.js');
+      await greet('medium');
+
+      expect(buildSystemPrompt).toHaveBeenCalledTimes(1);
+      expect(vi.mocked(buildSystemPrompt).mock.calls[0]![0]).not.toHaveProperty('missMarker');
+    });
+
+    it('a greeting followed by a question is a question: it still searches', async () => {
+      const { latestQuestion } = await import('../src/gaps.js');
+      vi.mocked(latestQuestion).mockReturnValueOnce('hi, is nrouter hiring?');
+      const { scoreConfidence } = await import('../src/confidence.js');
+      vi.mocked(scoreConfidence).mockReturnValue({ level: 'low', score: 0.1 });
+      const { runWebSearchDetailed } = await import('../src/web-search.js');
+      const agent = createSupportAgent({ client: fakeClient, model: 'm', knowledge: fakeIndex, webSearch: { label: 'B', search: vi.fn() } });
+      const events: any[] = [];
+      for await (const ev of agent.chat({ messages: [{ role: 'user', content: 'hi, is nrouter hiring?' }] })) events.push(ev);
+
+      expect(runWebSearchDetailed).toHaveBeenCalledTimes(1);
+      expect(events.find(e => e.type === 'confidence')).toMatchObject({ webSearched: true });
+    });
+
+    it('is not reported as a gap and does not offer a booking', async () => {
+      const { callHook } = await import('../src/hooks.js');
+      const events = await greet('low', { hooks: { onGap: vi.fn() }, booking: { url: 'https://example.com/book' } });
+
+      expect(callHook).not.toHaveBeenCalledWith(expect.anything(), 'onGap', expect.anything());
+      expect(events.some(e => e.type === 'action')).toBe(false);
+    });
+  });
+
   it('gives the search the timeout its provider asks for', async () => {
     const { scoreConfidence } = await import('../src/confidence.js');
     vi.mocked(scoreConfidence).mockReturnValue({ level: 'low', score: 0.1 });

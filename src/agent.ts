@@ -21,6 +21,7 @@ import { validateFeedback } from './feedback.js';
 import { maskPii, maskMessageContent } from './pii.js';
 import { matchesBookingIntent } from './booking.js';
 import { buildSuggestions } from './suggestions.js';
+import { isSmallTalk } from './small-talk.js';
 
 export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
   const cfg = resolveConfig(config);
@@ -37,7 +38,10 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       let webSources;
       let webSearched = false;
       let searchCost: CostEvent | 'unknown' | undefined;
-      if (conf.level === 'low' && cfg.webSearch && searchAllowed(cfg.webSearch, question)) {
+      // "hi" matches nothing in the docs, yet there is nothing to look up: it is
+      // answered without a search, a gap report or a booking offer.
+      const smallTalk = isSmallTalk(question);
+      if (!smallTalk && conf.level === 'low' && cfg.webSearch && searchAllowed(cfg.webSearch, question)) {
         webSearched = true;
         yield { type: 'tool_call', tool: 'web_search', title: 'Searched ' + cfg.webSearch.label, status: 'running' };
         try {
@@ -59,7 +63,7 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       // Similar-looking docs can still not answer the question. When a search is
       // available and has not run, the model is asked to say so with a marker, and
       // the search runs then. Not with host tools: a second answer would run them twice.
-      const detectMiss = !webSearched && !!cfg.webSearch && cfg.tools.length === 0;
+      const detectMiss = !smallTalk && !webSearched && !!cfg.webSearch && cfg.tools.length === 0;
       const system = buildSystemPrompt({
         agentName: cfg.agentName,
         instructions: cfg.instructions,
@@ -272,7 +276,7 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
          const questions = cfg.maskPii ? built.map(maskPii) : built;
          if (questions.length > 0) yield { type: 'suggestions', questions };
       }
-      if (cfg.booking && (conf.level === 'low' || matchesBookingIntent(question))) {
+      if (cfg.booking && ((conf.level === 'low' && !smallTalk) || matchesBookingIntent(question))) {
          yield { type: 'action', action: 'book_meeting', url: cfg.booking.url, label: cfg.booking.label };
       }
 
@@ -296,7 +300,7 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
          await mem.add({ role: 'assistant', content: fullResponse });
       }
 
-      if (conf.level === 'low') {
+      if (conf.level === 'low' && !smallTalk) {
          if (cfg.hooks.onGap) {
             callHook(cfg.hooks, 'onGap', {
                question,

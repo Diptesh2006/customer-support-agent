@@ -1,18 +1,86 @@
 # @nrouter_ai/support-agent
 
-An autonomous support agent powered by nRouter, featuring RAG, web search fallback, and streaming chat.
+A support agent that answers from your own documentation, built on [nRouter](https://nrouter.ai).
+You bring a folder of docs and one API key; it gives you a streaming chat endpoint with source
+links, an optional web search for what the docs miss, and a "book a meeting" hand-off. No database,
+no vector store to run: the knowledge index is one JSON file.
+
+It works for any product or team: a SaaS help centre, an internal IT or HR desk, a course, an
+open-source project, a shop's returns and shipping questions.
+
+## Run the example (5 minutes)
+
+You need Node.js 22.18 or newer and an nRouter API key ([create one](https://app.nrouter.ai)).
+
+```bash
+git clone https://github.com/nRouterGateway/customer-support-agent.git
+cd customer-support-agent
+npm install
+cp .env.example .env        # then put your key in NROUTER_API_KEY
+npm run example             # http://127.0.0.1:4175
+```
+
+The first start indexes the sample docs in `examples/quickstart/docs/` and writes `kb.json`. Ask it
+"how do I get a refund?" and it answers from those files, with the source linked.
+
+Everything is in two files you can read in a few minutes:
+[`examples/quickstart/server.mjs`](examples/quickstart/server.mjs) (the agent and its endpoint) and
+[`examples/quickstart/index.html`](examples/quickstart/index.html) (a chat page that reads the stream).
+Every setting is explained in [`.env.example`](.env.example).
+
+## Build your own
+
+1. **Point it at your docs.** Set `DOCS_DIR` to a folder of `.md`, `.mdx` or `.txt` files and
+   `DOCS_BASE_URL` to where they are published (that is what the source links point to). A `title:`
+   in a file's frontmatter becomes the source name. Public pages can be indexed alongside the folder:
+   `npx support-agent build-kb --docs ./docs --seed-url https://example.com/help --out kb.json`.
+   Delete `kb.json` and restart whenever the docs change; a stale index gives stale answers.
+2. **Give it a name and house rules.** `AGENT_NAME` and `AGENT_INSTRUCTIONS` (tone, what to do when
+   it cannot help, what never to promise). The agent already answers only from your docs, cites
+   them, and treats page and web text as data, never as instructions.
+3. **Pick a model.** `MODEL` is any model id your key can call. A small, fast model is usually
+   right for support; pass a list in code to add fallbacks (see [Model Fallback](#model-fallback)).
+4. **Decide what happens when the docs miss.** Leave `WEB_SEARCH_DOMAINS` empty and the agent says
+   it does not know. Set it to your own sites and it searches those first (see [Web Search](#web-search)).
+   Set `BOOKING_URL` and it offers a meeting link when a visitor asks for sales or a demo, or when
+   it has no confident answer.
+5. **Put it in your app.** Install the package into your own project and copy the handful of lines
+   from `server.mjs`; a Next.js route is shown under [Quick Start](#quick-start).
+
+   ```bash
+   npm install github:nRouterGateway/customer-support-agent
+   ```
+
+6. **Connect your chat UI.** Send `POST { "messages": [{ "role": "user", "content": "…" }] }` and
+   read the stream; the frames are listed under [Events & Wire Format](#events--wire-format).
+   `index.html` is a complete reader in about 60 lines.
+7. **Learn from it.** The `onGap` hook receives every question the docs could not answer: that
+   list is what to write next. `onCost` receives what each turn cost; `onFeedback` receives ratings.
+
+### Before you go live
+
+The example is a local demo. An endpoint that spends your API key needs, at minimum:
+
+- **A rate limit and a bot check** on the route. Anyone who can reach it can spend your credits.
+- **A key of its own, with a budget.** Create a separate nRouter key for the agent and set a spend
+  limit on it in the dashboard, so the worst case is a number you chose.
+- **Your login, not the request body, for identity.** Pass who the visitor is through the second
+  argument (`ctx`); see [Security](#security).
+- **The key on the server only.** Never ship it to the browser.
 
 ## Installation
 
 ```bash
-npm install @nrouter_ai/support-agent
+npm install github:nRouterGateway/customer-support-agent
 ```
+
+This builds the package from source on install, so it needs Node.js 22.18 or newer.
 
 ## Quick Start
 
 1. **Build a knowledge base**
 ```bash
-npx @nrouter_ai/support-agent build-kb --docs ./docs --out index.json
+NROUTER_API_KEY=sk-nrouter-... npx support-agent build-kb --docs ./docs --out index.json
 ```
 
 2. **Serve the agent (Next.js App Router)**
@@ -94,6 +162,10 @@ Docs first. The search runs in two cases:
   search runs, and the answer is written again from what it found. That first reply is a billed
   call and is counted in `cost`. This second case is off when you pass host `tools`, so they never
   run twice.
+
+A greeting is not a question. A message that is only "hi", "thanks", "ok" or a sign-off matches
+nothing in any docs, yet there is nothing to look up: it is answered in one line with no search, no
+`onGap` report and no booking offer. "Hi, how do I get a refund?" is a question and is treated as one.
 
 ### Keeping the search on your own sites
 

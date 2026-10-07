@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Support agent quickstart</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 680px; margin: 2rem auto; padding: 0 1rem; color: #111; line-height: 1.5; }
+    #log { display: flex; flex-direction: column; gap: 0.75rem; margin: 1rem 0; }
+    .msg { padding: 0.6rem 0.8rem; border-radius: 10px; white-space: pre-wrap; }
+    .user { align-self: flex-end; background: #111; color: #fff; }
+    .bot { align-self: flex-start; background: #f3f3f3; }
+    .meta { font-size: 0.8rem; color: #555; }
+    .meta a { color: inherit; }
+    form { display: flex; gap: 0.5rem; }
+    input { flex: 1; padding: 0.6rem; font-size: 1rem; border: 1px solid #bbb; border-radius: 8px; }
+    button { padding: 0.6rem 1rem; font-size: 1rem; border: 0; border-radius: 8px; background: #111; color: #fff; cursor: pointer; }
+    button:disabled { opacity: 0.5; }
+  </style>
+</head>
+<body>
+  <h1>Support agent</h1>
+  <p class="meta">Answers come from the docs folder this example indexed. Try a greeting, then a real question.</p>
+  <div id="log" aria-live="polite"></div>
+  <form id="form">
+    <input id="question" placeholder="Ask a question" autocomplete="off" required>
+    <button id="send" type="submit">Send</button>
+  </form>
+
+  <script>
+    const log = document.getElementById('log');
+    const form = document.getElementById('form');
+    const input = document.getElementById('question');
+    const send = document.getElementById('send');
+    const messages = [];
+
+    function add(className, text) {
+      const el = document.createElement('div');
+      el.className = className;
+      el.textContent = text;
+      log.appendChild(el);
+      return el;
+    }
+
+    // Links are built with DOM calls, never innerHTML: titles and URLs come from the stream.
+    function addLinks(label, links) {
+      const el = add('meta', label + ' ');
+      links.forEach((link, i) => {
+        if (!/^https?:\/\//.test(link.url)) return;
+        const a = document.createElement('a');
+        a.href = link.url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+        a.textContent = link.title;
+        if (i > 0) el.append(' · ');
+        el.append(a);
+      });
+    }
+
+    function handle(frame, bubble) {
+      if (frame.choices) {
+        bubble.textContent += frame.choices[0].delta.content;
+        return;
+      }
+      switch (frame.nrouter_event) {
+        case 'tool_call': if (frame.status === 'running') add('meta', frame.title + '…'); break;
+        case 'citations': addLinks('Sources:', frame.citations); break;
+        case 'suggestions': add('meta', 'Related: ' + frame.questions.join(' · ')); break;
+        case 'action': addLinks('', [{ title: frame.label, url: frame.url }]); break;
+        case 'cost': add('meta', frame.status === 'exact' ? 'Cost: $' + frame.costUsd : 'Cost: unpriced'); break;
+        case 'error': add('meta', 'Error: ' + frame.message); break;
+      }
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const content = input.value.trim();
+      if (!content) return;
+      input.value = '';
+      send.disabled = true;
+      messages.push({ role: 'user', content });
+      add('msg user', content);
+      const bubble = add('msg bot', '');
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messages }),
+        });
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const frames = buffer.split('\n\n');
+          buffer = frames.pop();
+          for (const raw of frames) {
+            const data = raw.replace(/^data: /, '');
+            if (data && data !== '[DONE]') handle(JSON.parse(data), bubble);
+          }
+        }
+        messages.push({ role: 'assistant', content: bubble.textContent });
+      } catch {
+        add('meta', 'Could not reach the agent.');
+      } finally {
+        send.disabled = false;
+        input.focus();
+      }
+    });
+  </script>
+</body>
+</html>

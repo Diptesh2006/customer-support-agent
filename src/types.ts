@@ -84,6 +84,8 @@ export interface BuildIndexOptions {
    */
   skipBlocked?: boolean;
   onSkip?(doc: { title: string; url: string; reason: string }): void;
+  /** Reuse vectors for unchanged chunks from a prior build. */
+  previousIndex?: KnowledgeIndex;
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +256,8 @@ export interface SupportAgentConfig {
   webSearch?: WebSearchProvider | false;
   /** Enables SDK conversation memory keyed by TrustedContext.sessionId. */
   memoryStore?: (sessionId: string) => MemoryStore;
+  /** Optional short-lived cache for identical requests. */
+  responseCache?: { ttlMs?: number; maxEntries?: number } | false;
   hooks?: SupportAgentHooks;
   /**
    * Mask emails and phone numbers in everything sent to the gateway (default
@@ -282,6 +286,7 @@ export interface ResolvedConfig {
   maxToolSteps: number;
   webSearch: WebSearchProvider | null;
   memoryStore: ((sessionId: string) => MemoryStore) | null;
+  responseCache: { get(key: string): AgentEvent[] | undefined; set(key: string, events: AgentEvent[]): void } | null;
   hooks: SupportAgentHooks;
   maskPii: boolean;
 }

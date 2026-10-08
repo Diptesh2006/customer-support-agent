@@ -82,6 +82,9 @@ export function isModelFallbackEligible(err: unknown): boolean {
   if (status === 503) {
     return noCode || code === 'service_unavailable';
   }
+  if (status === 429) {
+    return code === 'insufficient_quota' || (noCode && kind === 'insufficient_quota');
+  }
   return false;
 }
 

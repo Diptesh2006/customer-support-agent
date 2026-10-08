@@ -169,6 +169,10 @@ export interface CostEvent {
    */
   chatCostUsd?: number | null;
   searchCostUsd?: number | null;
+  /** The model that actually served the request (from gateway x-nr-model via SDK meta.model). */
+  actualModel?: string | null;
+  /** Which chain entry answered (from x-nr-routing header), e.g. direct, fallback:1. */
+  routingChain?: string | null;
 }
 
 export interface ToolCallEvent {
@@ -341,7 +345,7 @@ export type AgentEvent =
   | { type: 'token'; text: string }
   | { type: 'suggestions'; questions: string[] }
   | { type: 'action'; action: 'book_meeting'; url: string; label: string }
-  | { type: 'cost'; costUsd: number | null; status: 'exact' | 'unpriced'; requestId?: string; chatCostUsd?: number | null; searchCostUsd?: number | null }
+  | { type: 'cost'; costUsd: number | null; status: 'exact' | 'unpriced'; requestId?: string; chatCostUsd?: number | null; searchCostUsd?: number | null; actualModel?: string | null; routingChain?: string | null }
   | { type: 'error'; code: SupportAgentErrorCode; message: string }
   | { type: 'done' };
 

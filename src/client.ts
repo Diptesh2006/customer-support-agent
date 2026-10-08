@@ -153,7 +153,7 @@ export async function groundedSearch(
 }
 
 /** Map SDK ResponseMeta to a CostEvent. Unpriced → costUsd null, never 0. */
-export function costFromMeta(meta: ResponseMeta): CostEvent {
+export function costFromMeta(meta: ResponseMeta, routingChain?: string | null): CostEvent {
   const priced = isPriced(meta);
   
   let costUsd = null;
@@ -171,6 +171,12 @@ export function costFromMeta(meta: ResponseMeta): CostEvent {
   
   if (meta.requestId) {
     res.requestId = meta.requestId;
+  }
+  if (meta.model) {
+    res.actualModel = meta.model;
+  }
+  if (routingChain !== undefined) {
+    res.routingChain = routingChain;
   }
   return res;
 }

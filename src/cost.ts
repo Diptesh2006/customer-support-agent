@@ -22,6 +22,8 @@ export function addSearchCost(chat: CostEvent, search: CostEvent | 'unknown' | u
     searchCostUsd: searchPart,
   };
   if (chat.requestId) out.requestId = chat.requestId;
+  if (chat.actualModel !== undefined) out.actualModel = chat.actualModel;
+  if (chat.routingChain !== undefined) out.routingChain = chat.routingChain;
   return out;
 }
 
@@ -38,5 +40,8 @@ export function sumChatCosts(costs: CostEvent[]): CostEvent {
     ? { costUsd: costs.reduce((sum, c) => sum + (c.costUsd as number), 0), status: 'exact' }
     : { costUsd: null, status: 'unpriced' };
   if (last.requestId) out.requestId = last.requestId;
+  if (last.actualModel !== undefined) out.actualModel = last.actualModel;
+  if (last.routingChain !== undefined) out.routingChain = last.routingChain;
   return out;
 }
+

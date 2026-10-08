@@ -4,7 +4,7 @@ import { createClient } from './client.js';
 import { createMemoryKnowledgeStore } from './knowledge/store.js';
 import { createResponseCache } from './cache.js';
 
-export const DEFAULT_LIMITS: PayloadLimits = { maxMessages: 12, maxMessageChars: 2000, maxPageContextChars: 1000 };
+export const DEFAULT_LIMITS: PayloadLimits = { maxMessages: 12, maxMessageChars: 4000, maxPageContextChars: 1000 };
 export const DEFAULT_CONFIDENCE: ConfidenceThresholds = { high: 0.55, medium: 0.4 };
 export const DEFAULT_TOP_K = 5;
 export const DEFAULT_MAX_TOKENS = 1024;

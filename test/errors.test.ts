@@ -218,6 +218,11 @@ describe('errors', () => {
       expect(isModelFallbackEligible({ status: 503, code: 'mystery' })).toBe(false);
     });
 
+    it('accepts 429 when code or kind is insufficient_quota (CSA-14 / CSFOLLOW-002)', () => {
+      expect(isModelFallbackEligible({ status: 429, code: 'insufficient_quota' })).toBe(true);
+      expect(isModelFallbackEligible({ status: 429, code: null, kind: 'insufficient_quota' })).toBe(true);
+    });
+
     it('rejects auth, credit, budget, rate-limit and guardrail refusals', () => {
       expect(isModelFallbackEligible(classifyError(null, 'bad key', 401))).toBe(false);
       expect(isModelFallbackEligible(classifyError(null, 'forbidden', 403))).toBe(false);

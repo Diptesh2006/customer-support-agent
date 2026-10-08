@@ -43,6 +43,8 @@ export function encodeEvent(ev: AgentEvent): string {
         ? { nrouter_event: 'cost', costUsd: ev.costUsd, status: 'exact' }
         : { nrouter_event: 'cost', status: 'unpriced' };
       if (ev.requestId !== undefined) payload.requestId = ev.requestId;
+      if (ev.actualModel !== undefined) payload.actualModel = ev.actualModel;
+      if (ev.routingChain !== undefined) payload.routingChain = ev.routingChain;
       // The parts of a searched turn; null is "unknown", so it is sent, not dropped.
       if (ev.chatCostUsd !== undefined) payload.chatCostUsd = ev.chatCostUsd;
       if (ev.searchCostUsd !== undefined) payload.searchCostUsd = ev.searchCostUsd;

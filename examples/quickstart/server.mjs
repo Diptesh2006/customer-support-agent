@@ -83,7 +83,7 @@ const server = http.createServer(async (req, res) => {
       res.end(await readFile(page));
       return;
     }
-    if (req.method === 'POST' && req.url === '/api/chat') {
+    if (req.method === 'POST' && (req.url === '/api/chat' || req.url === '/api/public/ask')) {
       const body = await readJson(req);
       const ctx = {}; // e.g. { identity: { name, plan }, audiences: ['customers'], sessionId }
       const reader = agent.chatSSE({ messages: body.messages }, ctx).getReader();

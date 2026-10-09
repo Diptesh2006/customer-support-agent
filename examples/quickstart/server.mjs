@@ -78,6 +78,18 @@ async function readJson(req) {
 
 const server = http.createServer(async (req, res) => {
   try {
+    const origin = req.headers.origin;
+    if (origin === 'http://localhost:3000' || origin === 'http://127.0.0.1:3000') {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    }
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
     if (req.method === 'GET' && req.url === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(await readFile(page));

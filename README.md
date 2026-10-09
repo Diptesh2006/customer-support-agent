@@ -55,7 +55,8 @@ Every setting is explained in [`.env.example`](.env.example).
    read the stream; the frames are listed under [Events & Wire Format](#events--wire-format).
    `index.html` is a complete reader in about 60 lines.
 7. **Learn from it.** The `onGap` hook receives every question the docs could not answer: that
-   list is what to write next. `onCost` receives what each turn cost; `onFeedback` receives ratings.
+   list is what to write next. `onCost` receives what each turn cost; `onFeedback` receives ratings;
+   `onEscalation` tells you when a visitor needs a person (see [Hooks](#hooks)).
 
 ### Before you go live
 
@@ -121,6 +122,23 @@ export async function POST(req: Request) {
 | `webSearch` | Optional web search provider, used only when the knowledge base has no confident answer. `createNRouterWebSearch({ apiKey })` searches through the gateway with the same key (see [Web Search](#web-search)) |
 | `memoryStore` | Optional `(sessionId) => MemoryStore` from `@nrouter_ai/sdk`. When set and the host passes `ctx.sessionId`, the stored history is authoritative: only the latest user turn from the request is appended, and earlier turns in the request body are ignored |
 | `maskPii` | Mask emails and phone numbers before text leaves the process (default `true`) |
+| `responseCache` | In-memory cache that replays the events of an identical request (same body and same `ctx`). On by default: `{ ttlMs, maxEntries }`, defaults 5 minutes and 100 entries. A replayed turn makes no gateway call. Pass `false` to turn it off |
+| `agentName`, `instructions` | The agent's name (default `Support`) and house rules appended to the built-in system prompt |
+| `topK`, `maxTokens`, `confidence` | Retrieval depth (default 5), answer length (default 1024) and the similarity thresholds for `high` / `medium` confidence (defaults 0.55 / 0.40) |
+| `tools`, `maxToolSteps` | Optional host tools (`AgentTool` from `@nrouter_ai/sdk`) and the most tool steps per turn (default 4) |
+| `limits` | Request size limits (see [Limits](#limits)) |
+| `hooks` | Host callbacks (see [Hooks](#hooks)) |
+| `baseURL`, `client` | Override the gateway base URL, or pass an SDK client you already hold |
+
+### `build-kb` options
+
+```
+support-agent build-kb --docs <dir> [--seed-url <u>]... --out <file>
+    [--model m] [--dimensions n] [--base-url u] [--base-docs-url u]
+    [--incremental] [--skip-blocked] [--no-mask-pii]
+```
+
+`--incremental` reuses the vectors of unchanged chunks from the existing `--out` file, so only new or changed text is embedded again.
 
 ## Web Search
 
@@ -214,13 +232,24 @@ Each frame is `data: <json>\n\n`. Within one response the order is `token`… �
 | `suggestions` | `{"nrouter_event":"suggestions","questions":["…"]}` | `suggestions` is configured and the answer completed. Questions are built from the titles of the other retrieved documents |
 | `action` | `{"nrouter_event":"action","action":"book_meeting","url":"…","label":"…"}` | `booking` is configured and either the visitor's latest message asks for a meeting, a demo, sales or commercial terms, or confidence is `low` |
 
-Both are deterministic and make no extra model call. The booking URL comes only from your config: the model never sees or produces it. Suggestion text is derived from document titles, so treat it as untrusted and render it as plain text.
+The `cost` event carries `costUsd` and `status` (`exact` or `unpriced`), and, when the gateway reports them, `actualModel` (the model that served the answer) and `routingChain` (`direct` or `fallback:<n>`).
+
+`suggestions` and `action` are deterministic and make no extra model call. The booking URL comes only from your config: the model never sees or produces it. Suggestion text is derived from document titles, so treat it as untrusted and render it as plain text.
 
 ## Model Fallback
-Pass `model: ['primary', 'backup']` to name fallbacks. The agent moves to the next entry only when the gateway refuses the call as unavailable (HTTP 404 `model_not_found`, or HTTP 503) before any token has been streamed and before any of your `tools` has run. It never falls back on an authentication, credit, budget, rate-limit or guardrail refusal, or on an abort, so a fallback cannot change who pays or how. At most `model.length - 1` fallbacks happen per request, and no event says which model answered.
+Pass `model: ['primary', 'backup']` to name fallbacks. The agent moves to the next entry only when the gateway refuses the call as unavailable (HTTP 404 `model_not_found`, HTTP 503, or HTTP 429 `insufficient_quota`) before any token has been streamed and before any of your `tools` has run. It never falls back on an authentication, credit, budget, ordinary rate-limit or guardrail refusal, or on an abort, so a fallback cannot change who pays or how. At most `model.length - 1` fallbacks happen per request. The `cost` event's `actualModel` names the model that answered.
 
 ## Hooks
-Configure `hooks` to intercept feedback, gaps (low confidence questions), tool calls, and cost events.
+Configure `hooks` to observe a turn. The package stores nothing; the host persists what it wants. A hook that throws is reported to `onError` and never breaks the answer.
+
+| Hook | Receives |
+|---|---|
+| `onGap` | A question the docs could not answer confidently |
+| `onCost` | What the turn cost, with `actualModel` and `routingChain` when known |
+| `onFeedback` | A rating passed to `agent.feedback()` |
+| `onToolCall` | Each tool step (`running`, `done`, `error`) |
+| `onEscalation` | A turn that needs a person, with a `reason`: `human_requested` (the visitor asked for a human), `low_confidence` (no confident answer), or `unresolved` (a thumbs-down rating) |
+| `onError` | Errors from other hooks and non-fatal internal failures |
 
 ## PII and Gateway Guardrails
 
@@ -243,4 +272,4 @@ Maintain one index and one agent per organisation. Audiences are entitlement tag
 - **Host Responsibilities:** The host authenticates and rate-limits its route.
 
 ## Limits
-Defaults: `maxMessages: 12`, `maxMessageChars: 2000`, `maxPageContextChars: 1000`. Customize via `limits` config.
+Defaults: `maxMessages: 12`, `maxMessageChars: 4000`, `maxPageContextChars: 1000`. Customize via `limits` config.

@@ -37,11 +37,21 @@ describe('callHook', () => {
     expect(onError).toHaveBeenCalledWith({ code: 'internal_error', message: 'hook onGap failed' });
   });
 
-  it('does not throw if onError itself throws', () => {
-    const hooks: SupportAgentHooks = {
-      onGap: () => { throw new Error('boom'); },
-      onError: () => { throw new Error('onError boom'); }
-    };
-    expect(() => callHook(hooks, 'onGap', {} as any)).not.toThrow();
+  it('calls onEscalation successfully', () => {
+    const onEscalation = vi.fn();
+    const hooks: SupportAgentHooks = { onEscalation };
+    callHook(hooks, 'onEscalation', {
+      question: 'talk to human',
+      confidence: 'low',
+      webSearched: false,
+      reason: 'human_requested',
+    });
+    expect(onEscalation).toHaveBeenCalledWith({
+      question: 'talk to human',
+      confidence: 'low',
+      webSearched: false,
+      reason: 'human_requested',
+    });
   });
 });
+

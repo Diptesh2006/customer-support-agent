@@ -19,7 +19,7 @@ import { toSafeError, isModelFallbackEligible } from './errors.js';
 import { toSSE } from './sse.js';
 import { validateFeedback } from './feedback.js';
 import { maskPii, maskMessageContent } from './pii.js';
-import { matchesBookingIntent } from './booking.js';
+import { matchesBookingIntent, matchesHumanIntent } from './booking.js';
 import { buildSuggestions } from './suggestions.js';
 import { isSmallTalk } from './small-talk.js';
 import { responseCacheKey } from './cache.js';
@@ -301,6 +301,28 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
          await mem.add({ role: 'assistant', content: fullResponse });
       }
 
+      if (matchesHumanIntent(question)) {
+         if (cfg.hooks.onEscalation) {
+            callHook(cfg.hooks, 'onEscalation', {
+               question,
+               confidence: conf.level,
+               webSearched,
+               sessionId: validatedCtx.sessionId,
+               reason: 'human_requested'
+            });
+         }
+      } else if (conf.level === 'low' && !smallTalk) {
+         if (cfg.hooks.onEscalation) {
+            callHook(cfg.hooks, 'onEscalation', {
+               question,
+               confidence: conf.level,
+               webSearched,
+               sessionId: validatedCtx.sessionId,
+               reason: 'low_confidence'
+            });
+         }
+      }
+
       if (conf.level === 'low' && !smallTalk) {
          if (cfg.hooks.onGap) {
             callHook(cfg.hooks, 'onGap', {
@@ -352,6 +374,15 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
     const fb = validateFeedback(x);
     if (cfg.hooks.onFeedback) {
       callHook(cfg.hooks, 'onFeedback', fb);
+    }
+    if (fb.rating === 'down' && cfg.hooks.onEscalation) {
+      callHook(cfg.hooks, 'onEscalation', {
+        question: fb.question || '',
+        confidence: fb.confidence || 'low',
+        webSearched: fb.webSearched || false,
+        sessionId: fb.sessionId,
+        reason: 'unresolved'
+      });
     }
   }
 

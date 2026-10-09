@@ -181,11 +181,20 @@ export interface ToolCallEvent {
   status: 'running' | 'done' | 'error';
 }
 
+export interface EscalationEvent {
+  question: string;
+  confidence: ConfidenceLevel;
+  webSearched: boolean;
+  sessionId?: string;
+  reason: 'low_confidence' | 'human_requested' | 'unresolved';
+}
+
 export interface SupportAgentHooks {
   onGap?(gap: GapEvent): void | Promise<void>;
   onFeedback?(fb: FeedbackInput): void | Promise<void>;
   onCost?(cost: CostEvent): void | Promise<void>;
   onToolCall?(ev: ToolCallEvent): void | Promise<void>;
+  onEscalation?(ev: EscalationEvent): void | Promise<void>;
   /** Receives errors from other hooks and non-fatal internal failures. Must not throw. */
   onError?(err: SafeError): void;
 }

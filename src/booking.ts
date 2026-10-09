@@ -27,3 +27,18 @@ export function matchesBookingIntent(message: string): boolean {
   const text = message.slice(0, MAX_SCAN_CHARS).toLowerCase().replace(/\s+/g, ' ');
   return BOOKING_PHRASES.some((re) => re.test(text));
 }
+
+const HUMAN_PHRASES: readonly RegExp[] = [
+  /\b(?:talk|speak) (?:to|with) (?:a human|a person|an agent|someone|support|representative)\b/,
+  /\bhuman (?:agent|support|help|representative)\b/,
+  /\bescalate(?: to human)?\b/,
+  /\bconnect (?:me )?(?:to|with) (?:a human|a person|an agent|support)\b/,
+];
+
+/** True when the visitor explicitly asks for human support or escalation. */
+export function matchesHumanIntent(message: string): boolean {
+  if (typeof message !== 'string') return false;
+  const text = message.slice(0, MAX_SCAN_CHARS).toLowerCase().replace(/\s+/g, ' ');
+  return HUMAN_PHRASES.some((re) => re.test(text));
+}
+

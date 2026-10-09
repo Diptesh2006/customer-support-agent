@@ -30,13 +30,13 @@ const bookingUrl = env('BOOKING_URL');
 
 // 1. The knowledge index: built once from your docs, then reused from disk.
 async function loadOrBuildKnowledge() {
-  if (existsSync(kbPath)) return loadKnowledgeIndex(kbPath);
-  console.log(`Building the knowledge index from ${docsDir} ...`);
+  const previousIndex = existsSync(kbPath) ? await loadKnowledgeIndex(kbPath) : undefined;
+  console.log(`${previousIndex ? 'Refreshing' : 'Building'} the knowledge index from ${docsDir} ...`);
   const docs = await readDocsDir(docsDir, env('DOCS_BASE_URL') || undefined);
   if (docs.length === 0) throw new Error(`No .md, .mdx or .txt files found in ${docsDir}`);
-  const index = await buildKnowledgeIndex({ client: new nRouter({ apiKey, baseURL }), docs });
+  const index = await buildKnowledgeIndex({ client: new nRouter({ apiKey, baseURL }), docs, previousIndex });
   await saveKnowledgeIndex(kbPath, index);
-  console.log(`Indexed ${docs.length} documents as ${index.chunks.length} chunks -> ${kbPath}`);
+  console.log(`${previousIndex ? 'Refreshed' : 'Indexed'} ${docs.length} documents as ${index.chunks.length} chunks -> ${kbPath}`);
   return index;
 }
 

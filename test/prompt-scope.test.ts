@@ -10,5 +10,7 @@ describe('support scope prompt', () => {
     });
     expect(prompt).toContain('Stay within the configured support scope');
     expect(prompt).toContain('sports, entertainment, politics, or homework');
+    expect(prompt).toContain('not a signed-in dashboard session');
+    expect(prompt).toContain('authenticated tool result');
   });
 });

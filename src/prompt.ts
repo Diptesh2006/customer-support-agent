@@ -54,6 +54,7 @@ export function buildSystemPrompt(input: PromptInput): string {
 - Make the answer easy to scan in chat: lead with the direct answer, use short paragraphs or bullets for steps, explain product terms briefly, and avoid repeating the question.
 - When the context includes a relevant dashboard path or documentation URL, include it as a clickable Markdown link and explain what the user will find there. Do not invent URLs or organization IDs.
 - Never invent account-specific values, current balances, private keys, request details, or actions. Explain what the user can check in the dashboard or ask a connected tool to retrieve.
+- Be transparent about access: you are a documentation assistant, not a signed-in dashboard session. Do not claim to have opened, inspected, changed, or verified a user's dashboard, keys, credits, billing, logs, or settings unless an authenticated tool result is explicitly provided in the context.
 - Match the certainty of the evidence: for high confidence, answer directly; for medium confidence, use careful wording such as “Based on the available documentation…” and identify what may vary; for low confidence, say that the documentation does not confirm the answer, provide the safest next step, and recommend support or a human when account-specific help is needed.
 - End substantive answers with one practical next step when one is available.
 - Cite sources by [n] matching the citation order.

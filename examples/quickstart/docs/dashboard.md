@@ -3,19 +3,36 @@ title: Dashboard and account help
 audiences: [public]
 ---
 
-# Dashboard and account help
+# nRouter dashboard and account help
+
+The nRouter dashboard is available at `https://app.nrouter.ai` (or `http://localhost:5001` during local development). It provides self-serve tools for virtual API keys, usage, billing, request tracing, MCP servers, and model discovery.
+
+## Organization and workspace navigation
+
+Resources belong to an organization workspace. Common areas include:
+
+- `/[org]/keys`: virtual key lifecycle, model restrictions, rate limits, and spend ceilings.
+- `/[org]/logs`: request logs, usage, latency, request IDs, and spend.
+- `/[org]/debug`: request trace and answer inspection.
+- `/[org]/mcp-hub`: MCP server registry.
+- `/[org]/tools-hub`: exposed tools and schemas.
+- `/[org]/models`: available models and benchmarks.
+- `/[org]/playground`: interactive prompt testing.
+- `/[org]/billing`: allowances, credits, and subscription details.
 
 ## API keys
 
-Create and manage virtual API keys from the dashboard. Give each key only the access and spend limit it needs. The full secret is shown once when a key is created, so store it securely. If a key is lost or exposed, revoke it immediately and create a replacement.
+Create and manage virtual API keys from the dashboard. Give each key only the access and spend limit it needs. Keys may have model restrictions, RPM/TPM rate limits, CIDR/IP allowlists, and fallback settings. The full secret is shown once when a key is created, so store it securely. If a key is lost or exposed, revoke it immediately and create a replacement. Never paste a full key into chat, email, logs, or support tickets.
 
-## Usage and spend
+## Usage, billing, and limits
 
-Use the dashboard usage and request logs to review activity, spend, model usage, request IDs, and request outcomes. Keep a request ID when contacting support about a failed request. A request may show an unpriced status when pricing metadata was unavailable; this does not mean the request was free.
+Use usage and request logs to review activity, spend, model usage, request IDs, status codes, and latency. Logs can show input, output, cache, and reasoning token details. A request may show an `unpriced` status when pricing metadata was unavailable; this does not mean the request was free.
 
-## Models and limits
+The dashboard is also the place to review model availability, budgets, spend ceilings, quota, and rate-limit behavior. A key with a spend ceiling or model restriction cannot exceed those settings. Keep the request ID when contacting support about a failed request.
 
-The dashboard is the place to review the models available to your key, configure budgets or spend ceilings, and inspect quota or rate-limit behavior. A key with a spend ceiling or model restriction cannot exceed those settings.
+## Request debugging
+
+The debug area can show the request pipeline, timing, validation, rate-limit checks, safety checks, credit reservation, upstream execution, streaming, and settlement. The answer inspector may show prompt transformations and response metadata such as request ID and cost headers. Do not share secrets from debug output.
 
 ## Team access
 
@@ -24,7 +41,3 @@ Workspace owners can invite teammates from the dashboard and assign the appropri
 ## Getting help
 
 Signed-in users should use the in-app support drawer for account-specific questions about keys, credits, budgets, failed requests, or request IDs. The support agent can explain public documentation, but it must not guess private account values. Contact a human when the agent cannot resolve the issue.
-
-## Security
-
-Never paste a full API key into chat, email, logs, or a support ticket. Rotate exposed keys and review recent request activity after a suspected leak.

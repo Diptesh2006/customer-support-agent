@@ -1,5 +1,5 @@
 {
-  "description": "Eval cases for the support agent.",
+  "description": "Eval cases for the support agent across Dashboards, MCP Servers, Jev Classification, Vector Grounding, and Safety.",
   "cases": [
     {
       "id": "kb-platform-fee",
@@ -51,6 +51,12 @@
       "expect": { "confidenceIn": ["high", "medium"], "containsAny": ["inspector", "timeline", "stage"] }
     },
     {
+      "id": "dash-overview",
+      "category": "Dashboard",
+      "question": "What features can I access in the nRouter dashboard under my organization workspace?",
+      "expect": { "confidenceIn": ["high", "medium"], "containsAny": ["keys", "logs", "debug", "mcp", "models", "billing"] }
+    },
+    {
       "id": "mcp-add-server",
       "category": "MCP Server",
       "question": "How do I add an MCP server in the dashboard?",
@@ -73,6 +79,36 @@
       "category": "MCP Server",
       "question": "How do I configure Claude Desktop or Cursor to connect through https://api.nrouter.ai/mcp/{name}?",
       "expect": { "confidenceIn": ["high", "medium"], "containsAny": ["cursor", "claude", "api.nrouter.ai/mcp"] }
+    },
+    {
+      "id": "mcp-proxy-reverse",
+      "category": "MCP Server",
+      "question": "How does nRouter proxy MCP requests and protect upstream credentials?",
+      "expect": { "confidenceIn": ["high", "medium"], "containsAny": ["proxy", "credential", "sanitiz", "reverse", "header"] }
+    },
+    {
+      "id": "jev-auto-routing",
+      "category": "Jev Classification",
+      "question": "How does nRouter use Jev classification for autonomous task and model routing in nrouter/auto?",
+      "expect": { "confidenceIn": ["high", "medium"], "containsAny": ["jev", "routing", "auto", "task"] }
+    },
+    {
+      "id": "jev-system-one-vetting",
+      "category": "Jev Classification",
+      "question": "What is System One Jev vetting and what confidence score is required before publishing a model?",
+      "expect": { "confidenceIn": ["high", "medium"], "containsAny": ["0.90", "90%", "vetting", "system one", "confidence"] }
+    },
+    {
+      "id": "vector-kb-grounding",
+      "category": "Vector KB & Caching",
+      "question": "How does the customer support agent ground answers in the vector knowledge base?",
+      "expect": { "confidenceIn": ["high", "medium"], "containsAny": ["vector", "cosine", "embedding", "citation", "ground"] }
+    },
+    {
+      "id": "vector-response-caching",
+      "category": "Vector KB & Caching",
+      "question": "How does the support agent cache repeated questions to ensure zero latency and zero cost?",
+      "expect": { "confidenceIn": ["high", "medium"], "containsAny": ["cache", "response", "latency", "cost"] }
     },
     {
       "id": "fallback-quota",

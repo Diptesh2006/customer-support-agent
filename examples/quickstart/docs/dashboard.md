@@ -11,14 +11,14 @@ The nRouter dashboard is available at `https://app.nrouter.ai` (or `http://local
 
 Resources belong to an organization workspace. Common areas include:
 
-- `/[org]/keys`: virtual key lifecycle, model restrictions, rate limits, and spend ceilings.
-- `/[org]/logs`: request logs, usage, latency, request IDs, and spend.
-- `/[org]/debug`: request trace and answer inspection.
-- `/[org]/mcp-hub`: MCP server registry.
-- `/[org]/tools-hub`: exposed tools and schemas.
-- `/[org]/models`: available models and benchmarks.
-- `/[org]/playground`: interactive prompt testing.
-- `/[org]/billing`: allowances, credits, and subscription details.
+- [Virtual keys](https://app.nrouter.ai/[org]/keys): key lifecycle, model restrictions, rate limits, and spend ceilings.
+- [Usage and logs](https://app.nrouter.ai/[org]/logs): request logs, usage, latency, request IDs, and spend.
+- [Debug and traces](https://app.nrouter.ai/[org]/debug): request trace and answer inspection.
+- [MCP Hub](https://app.nrouter.ai/[org]/mcp-hub): MCP server registry.
+- [Tools Hub](https://app.nrouter.ai/[org]/tools-hub): exposed tools and schemas.
+- [Models](https://app.nrouter.ai/[org]/models): available models and benchmarks.
+- [Playground](https://app.nrouter.ai/[org]/playground): interactive prompt testing.
+- [Billing](https://app.nrouter.ai/[org]/billing): allowances, credits, and subscription details.
 
 ## API keys
 

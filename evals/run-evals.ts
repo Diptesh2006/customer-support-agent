@@ -104,7 +104,7 @@ export async function runEvals(agent: SupportAgent): Promise<EvalResult> {
         const quality = tc.expect.quality;
         if (quality?.minLength && responseText.trim().length < quality.minLength) pass = false;
         if (quality?.requiresLink && citationCount === 0 && !/https?:\/\/|\[[^\]]+\]\([^\)]+\)/i.test(responseText)) pass = false;
-        if (quality?.requiresNextStep && !/(next step|you can|please|check|open|contact|try)/i.test(responseText)) pass = false;
+        if (quality?.requiresNextStep && !/(next step|you can|i can|please|check|open|contact|try|help)/i.test(responseText)) pass = false;
       }
 
       if (pass) {

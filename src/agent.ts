@@ -23,6 +23,7 @@ import { matchesBookingIntent, matchesHumanIntent } from './booking.js';
 import { buildSuggestions } from './suggestions.js';
 import { isSmallTalk } from './small-talk.js';
 import { responseCacheKey } from './cache.js';
+import { classifyLocal } from './jev.js';
 
 export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
   const cfg = resolveConfig(config);
@@ -32,6 +33,7 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       const validatedReq = validateChatRequest(req, cfg.limits);
       const validatedCtx = ctx ? validateTrustedContext(ctx) : {};
       const question = latestQuestion(validatedReq.messages);
+      const intent = classifyLocal(question);
       
       const chunks = await retrieve(cfg, question, { audiences: validatedCtx.audiences, signal: validatedReq.signal });
       const conf = scoreConfidence(chunks, cfg.confidence);
@@ -72,7 +74,8 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
         pageContext: sanitizePageContext(validatedReq.pageContext, cfg.limits.maxPageContextChars),
         chunks,
         webSources,
-        ...(detectMiss ? { missMarker: MISS_MARKER } : {})
+        ...(detectMiss ? { missMarker: MISS_MARKER } : {}),
+        intent,
       });
       
       let history: ChatTurn[] = validatedReq.messages;

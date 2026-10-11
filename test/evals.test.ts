@@ -90,7 +90,7 @@ describe('Evals Suite', () => {
 
     const results = await runEvals(mockAgent);
     
-    expect(results.total).toBe(24);
+    expect(results.total).toBe(26);
     expect(results.failed).toBe(0);
     expect(results.passRate).toBe(100);
     expect(results.categories['Dashboard']?.passed).toBe(5);

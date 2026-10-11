@@ -36,7 +36,9 @@ describe('buildSystemPrompt', () => {
 
   it('includes intent routing guidance without treating it as factual evidence', () => {
     const prompt = buildSystemPrompt({
-      ...base,
+      agentName: 'Bot',
+      instructions: '',
+      chunks: [],
       intent: { category: 'dashboard', confidence: 0.93, explanation: 'Dashboard navigation' },
     });
     expect(prompt).toContain('Category: dashboard');

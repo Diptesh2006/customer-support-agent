@@ -30,7 +30,7 @@ describe('Evals Suite', () => {
         } else if (q.includes('OpenAI-compatible')) {
           response = 'Yes, the openai compatible API.';
         } else if (q.includes('API key')) {
-          response = 'create a key in the dashboard.';
+          response = 'Create a key in the dashboard. Next step: open the Keys page and create the key.';
         } else if (q.includes('credits work')) {
           response = 'credit balance runs out, you get 402.';
         } else if (q.includes('virtual key with a spend ceiling')) {

@@ -12,6 +12,11 @@ export interface EvalCase {
     containsAny?: string[];
     notContains?: string[];
     okErrors?: string[];
+    quality?: {
+      requiresLink?: boolean;
+      requiresNextStep?: boolean;
+      minLength?: number;
+    };
   };
 }
 
@@ -50,6 +55,7 @@ export async function runEvals(agent: SupportAgent): Promise<EvalResult> {
 
     let responseText = '';
     let confidenceLevel: string | null = null;
+      let citationCount = 0;
     let okError = false;
     let errorSeen = false;
 
@@ -63,6 +69,8 @@ export async function runEvals(agent: SupportAgent): Promise<EvalResult> {
           responseText += event.text;
         } else if (event.type === 'confidence') {
           confidenceLevel = event.level;
+        } else if (event.type === 'citations') {
+          citationCount = event.citations.length;
         } else if (event.type === 'error') {
           errorSeen = true;
           if (tc.expect.okErrors && tc.expect.okErrors.includes(event.code)) {
@@ -93,6 +101,10 @@ export async function runEvals(agent: SupportAgent): Promise<EvalResult> {
             pass = false;
           }
         }
+        const quality = tc.expect.quality;
+        if (quality?.minLength && responseText.trim().length < quality.minLength) pass = false;
+        if (quality?.requiresLink && citationCount === 0 && !/https?:\/\/|\[[^\]]+\]\([^\)]+\)/i.test(responseText)) pass = false;
+        if (quality?.requiresNextStep && !/(next step|you can|please|check|open|contact|try)/i.test(responseText)) pass = false;
       }
 
       if (pass) {

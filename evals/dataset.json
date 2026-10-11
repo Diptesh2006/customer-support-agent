@@ -19,7 +19,7 @@
     {
       "id": "kb-create-key",
       "question": "How do I create an API key?",
-      "expect": { "confidenceIn": ["high", "medium"], "containsAny": ["key", "dashboard", "create"] }
+      "expect": { "confidenceIn": ["high", "medium"], "containsAny": ["key", "dashboard", "create"], "quality": { "requiresLink": true, "requiresNextStep": true, "minLength": 20 } }
     },
     {
       "id": "kb-credits",
@@ -150,7 +150,7 @@
       "id": "offtopic-football",
       "category": "Off-topic",
       "question": "What is football?",
-      "expect": { "confidenceIn": ["low"], "containsAny": ["support", "nrouter", "help"] }
+      "expect": { "confidenceIn": ["low"], "containsAny": ["support", "nrouter", "help"], "quality": { "requiresNextStep": true, "minLength": 20 } }
     }
   ]
 }

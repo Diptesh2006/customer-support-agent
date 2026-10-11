@@ -63,6 +63,7 @@ const agent = createSupportAgent({
 // 3. The endpoint. `ctx` is what YOUR login knows about the visitor; nothing in
 // the request body is trusted for identity.
 const page = fileURLToPath(new URL('./index.html', import.meta.url));
+const dashboardLinksPage = fileURLToPath(new URL('./dashboard-links.html', import.meta.url));
 const MAX_BODY_BYTES = 64 * 1024;
 
 async function readJson(req) {
@@ -93,6 +94,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && req.url === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(await readFile(page));
+      return;
+    }
+    if (req.method === 'GET' && req.url === '/dashboard-links.html') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(await readFile(dashboardLinksPage));
       return;
     }
     if (req.method === 'POST' && (req.url === '/api/chat' || req.url === '/api/public/ask')) {

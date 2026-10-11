@@ -1,7 +1,7 @@
 // Public entry: "@nrouter_ai/support-agent". Edge-safe: no node: imports reachable from here.
 export * from './types.js';
 export { createSupportAgent } from './agent.js';
-export { createResponseCache, responseCacheKey } from './cache.js';
+export { createResponseCache, responseCacheKey, isVectorGrounded, type ResponseCacheOptions } from './cache.js';
 export { SupportAgentError, toSafeError, redact } from './errors.js';
 export { buildKnowledgeIndex, DEFAULT_EMBEDDING_MODEL, DEFAULT_EMBEDDING_DIMENSIONS } from './knowledge/build.js';
 export { createMemoryKnowledgeStore, cosineSimilarity } from './knowledge/store.js';
@@ -14,3 +14,5 @@ export type { NRouterWebSearchOptions } from './nrouter-web-search.js';
 export { toSSE, encodeEvent } from './sse.js';
 export { validateFeedback } from './feedback.js';
 export { maskPii } from './pii.js';
+export { classifyLocal, classifyWithJev, JEV_MODEL, type JevSupportCategory, type JevClassificationResult } from './jev.js';
+export { formatMcpClientConfig, createMcpTools, type McpClientConfig } from './mcp.js';

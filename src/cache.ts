@@ -20,6 +20,12 @@ export function createResponseCache(options: ResponseCacheOptions = {}) {
       entries.delete(key); entries.set(key, { expiresAt: Date.now() + ttlMs, events: replayable.map(event => ({ ...event })) });
       while (entries.size > maxEntries) entries.delete(entries.keys().next().value as string);
     },
+    size(): number {
+      return entries.size;
+    },
+    clear(): void {
+      entries.clear();
+    }
   };
 }
 
@@ -29,4 +35,34 @@ export function responseCacheKey(req: unknown, ctx: unknown): string {
     delete (cleanReq as Record<string, unknown>).signal;
   }
   return JSON.stringify({ req: cleanReq, ctx });
+}
+
+/**
+ * Returns true if the turn events demonstrate grounding in the vector knowledge base:
+ * medium or high confidence, citations from retrieved docs, no web-search fallback, and no error.
+ */
+export function isVectorGrounded(events: AgentEvent[]): boolean {
+  let hasConfidence = false;
+  let hasCitations = false;
+  let webSearched = false;
+  let hasError = false;
+
+  for (const ev of events) {
+    if (ev.type === 'confidence') {
+      if (ev.level === 'high' || ev.level === 'medium') {
+        hasConfidence = true;
+      }
+      if (ev.webSearched) {
+        webSearched = true;
+      }
+    } else if (ev.type === 'citations') {
+      if (ev.citations && ev.citations.length > 0) {
+        hasCitations = true;
+      }
+    } else if (ev.type === 'error') {
+      hasError = true;
+    }
+  }
+
+  return hasConfidence && hasCitations && !webSearched && !hasError;
 }

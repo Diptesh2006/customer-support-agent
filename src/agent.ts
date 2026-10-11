@@ -273,6 +273,17 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
          }
       }
 
+      // Always leave the visitor with a useful next step when neither the
+      // knowledge base nor the optional web search can answer the question.
+      if (docsMissed && !fullResponse) {
+         const fallback = intent.category === 'off_topic'
+            ? 'I can help with nRouter support, dashboard, API, billing, model, and MCP questions. Please ask one of those and I’ll point you to the right information.'
+            : 'I couldn’t confirm that from the available nRouter documentation. Please share the relevant request ID or check the dashboard documentation, and contact support if you need account-specific help.';
+         fullResponse = fallback;
+         tokensEmitted = true;
+         yield { type: 'token', text: fallback };
+      }
+
       // Both are deterministic: no model call, and the model never sees the booking URL.
       if (cfg.suggestions) {
          // Titles come from the knowledge index, so they are masked like any other outbound text.

@@ -1,27 +1,22 @@
 ---
-title: Billing and plans
+title: Billing, credits, and platform fees
 ---
 
-# Billing and plans
+# Billing, credits, and platform fees
 
-Sample content: replace it with your own.
+The current [nRouter pricing page](https://nrouter.ai/pricing) is the source of truth for plan pricing and fees.
 
-## Plans
+## Pay as you go
 
-- **Free**: up to 3 members and 2 projects.
-- **Team**: 8 USD per member per month, unlimited projects, up to 50 members.
+- Add credits starting at **$5**. There is no subscription commitment.
+- The current pricing page lists a **0% platform fee** on credit purchases.
+- Requests use credits at the served model's listed price; nRouter does not add a per-token model markup.
+- The signed-in dashboard's **Billing** page is where you can view your balance and manage credit purchases.
 
-## Changing plan
+## Enterprise
 
-A workspace owner can change plan in **Settings → Billing**. Upgrades apply
-immediately and are prorated. Downgrades apply at the end of the billing period.
+Enterprise pricing, platform fees, and service terms are custom. Contact the nRouter sales team for a quote.
 
-## Refunds
+## Current pricing
 
-We refund the most recent payment in full if you ask within 14 days of the
-charge. Email billing@example.com from the address on the account.
-
-## Invoices
-
-Invoices are emailed to the workspace owner on each charge and are listed in
-**Settings → Billing → Invoices**.
+Fees and plan terms can change. For the latest details, use the [nRouter pricing page](https://nrouter.ai/pricing).

@@ -12,7 +12,9 @@ describe('support scope prompt', () => {
     expect(prompt).toContain('sports, entertainment, politics, or homework');
     expect(prompt).toContain('not a signed-in dashboard session');
     expect(prompt).toContain('authenticated tool result');
-    expect(prompt).toContain('Do not open with “I don’t know”');
+    expect(prompt).toContain('Never use an opening disclaimer or preamble');
+    expect(prompt).toContain('The provided documentation does not specify');
+    expect(prompt).toContain('Here’s what I can confirm');
     expect(prompt).toContain('numbered steps beginning with the first action');
     expect(prompt).toContain('Do not use a separate “Next step” heading');
     expect(prompt).toContain('curated questions about live models');

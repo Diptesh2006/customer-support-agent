@@ -12,5 +12,8 @@ describe('support scope prompt', () => {
     expect(prompt).toContain('sports, entertainment, politics, or homework');
     expect(prompt).toContain('not a signed-in dashboard session');
     expect(prompt).toContain('authenticated tool result');
+    expect(prompt).toContain('Do not open with “I don’t know”');
+    expect(prompt).toContain('numbered steps beginning with the first action');
+    expect(prompt).toContain('Do not use a separate “Next step” heading');
   });
 });

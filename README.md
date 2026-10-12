@@ -2,8 +2,9 @@
 
 A support agent that answers from your own documentation, built on [nRouter](https://nrouter.ai).
 You bring a folder of docs and one API key; it gives you a streaming chat endpoint with source
-links, an optional web search for what the docs miss, and a "book a meeting" hand-off. No database,
-no vector store to run: the knowledge index is one JSON file.
+links, an optional web search for what the docs miss, and a "book a meeting" hand-off. The default
+knowledge index is one JSON file; production deployments can use the optional PostgreSQL/pgvector
+store when they need a shared, tenant-scoped index.
 
 It works for any product or team: a SaaS help centre, an internal IT or HR desk, a course, an
 open-source project, a shop's returns and shipping questions.
@@ -139,6 +140,63 @@ support-agent build-kb --docs <dir> [--seed-url <u>]... --out <file>
 ```
 
 `--incremental` reuses the vectors of unchanged chunks from the existing `--out` file, so only new or changed text is embedded again.
+
+## PostgreSQL knowledge store
+
+The JSON index remains the zero-database option. For a shared production index, the Node entry
+exports `createPostgresKnowledgeStore` and `syncPostgresKnowledgeIndex`; install `pg` in the host
+application and apply [`migrations/001_support_agent_pgvector.sql`](migrations/001_support_agent_pgvector.sql)
+once to a PostgreSQL database with permission to enable the `vector` extension. The migration uses
+pgvector HNSW cosine search with the default 768-dimension embedding model.
+
+Run `examples/quickstart/sync-postgres.mjs` from a deploy job after documentation changes. It rebuilds
+the index, reuses embeddings for unchanged chunks from `kb.json`, and publishes a complete snapshot
+for the selected tenant. Publication uses a transaction and swaps the active generation atomically;
+failed ingestion leaves the previous index available. Deleted documents disappear on the next
+successful full sync. Set `NROUTER_API_KEY`, `DATABASE_URL`, and `TENANT_ID` for the job.
+
+At runtime, construct the store using the same embedding model and dimensions, then pass the
+organization ID from the backend's verified login session as `TrustedContext.tenantId`:
+
+```typescript
+import pg from 'pg';
+import { createSupportAgent, DEFAULT_EMBEDDING_MODEL, DEFAULT_EMBEDDING_DIMENSIONS } from '@nrouter_ai/support-agent';
+import { createPostgresKnowledgeStore } from '@nrouter_ai/support-agent/node';
+
+const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
+const knowledge = createPostgresKnowledgeStore(pool, {
+  embeddingModel: DEFAULT_EMBEDDING_MODEL,
+  dimensions: DEFAULT_EMBEDDING_DIMENSIONS,
+});
+const agent = createSupportAgent({ apiKey: process.env.NROUTER_API_KEY!, model: process.env.MODEL!, knowledge });
+
+// In your authenticated route, derive this from your server-side session:
+// agent.chatSSE(body, { tenantId: session.organizationId, sessionId: session.id });
+```
+
+Never take `tenantId` or `userId` from the chat body or browser page context. The store requires the
+tenant ID and scopes every vector search to it. To add private account facts, configure a server-side
+provider that queries only records matching both authenticated IDs. For example, add this to the
+agent config (adapt table and column names to your app):
+
+```typescript
+userDataProvider: {
+  async load({ tenantId, userId }) {
+    const result = await pool.query(
+      'SELECT plan, status, credit_balance FROM accounts WHERE tenant_id = $1 AND user_id = $2',
+      [tenantId, userId],
+    );
+    return result.rows[0] ? JSON.stringify(result.rows[0]) : null;
+  },
+}
+```
+
+The authenticated route must call `agent.chatSSE(body, { tenantId: session.organizationId, userId: session.userId })`.
+Account data is loaded on the server for each turn and added to the prompt alongside vector search
+results. Dynamic account lookups bypass response caching so stale account data is not replayed. Keep
+account-specific records in their application tables; do not place private account records in the
+shared documentation index. If a lookup fails, the agent returns an error instead of answering
+without account context.
 
 ## Web Search
 

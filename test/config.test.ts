@@ -44,6 +44,10 @@ describe('resolveConfig', () => {
     expect(() => resolveConfig(cfg)).toThrowError(SupportAgentError);
   });
 
+  it('requires a callable user data provider when configured', () => {
+    expect(() => resolveConfig({ ...validBaseConfig, userDataProvider: {} as any })).toThrowError(SupportAgentError);
+  });
+
   it('rejects missing apiKey when client not provided', () => {
     const cfg = { ...validBaseConfig } as any;
     delete cfg.apiKey;

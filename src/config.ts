@@ -90,6 +90,9 @@ function resolveSuggestions(suggestions: unknown): ResolvedConfig['suggestions']
 
 /** Apply defaults and validate. Throws SupportAgentError('invalid_config') naming the field, never a value. */
 export function resolveConfig(config: SupportAgentConfig): ResolvedConfig {
+  if (config.userDataProvider !== undefined && typeof config.userDataProvider?.load !== 'function') {
+    throw new SupportAgentError('invalid_config', 'userDataProvider.load must be a function');
+  }
   const models = resolveModels(config.model);
   const defaultHeaders = resolveDefaultHeaders(config.defaultHeaders);
   const booking = resolveBooking(config.booking);
@@ -174,6 +177,7 @@ export function resolveConfig(config: SupportAgentConfig): ResolvedConfig {
     booking,
     suggestions,
     store,
+    userDataProvider: config.userDataProvider ?? null,
     agentName: config.agentName ?? DEFAULT_AGENT_NAME,
     instructions: config.instructions ?? '',
     topK,

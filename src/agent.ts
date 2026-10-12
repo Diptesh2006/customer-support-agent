@@ -15,7 +15,7 @@ import { sanitizePageContext } from './page-context.js';
 import { runToolPhase } from './tools.js';
 import { streamChat } from './client.js';
 import { callHook } from './hooks.js';
-import { toSafeError, isModelFallbackEligible } from './errors.js';
+import { SupportAgentError, toSafeError, isModelFallbackEligible } from './errors.js';
 import { toSSE } from './sse.js';
 import { validateFeedback } from './feedback.js';
 import { maskPii, maskMessageContent } from './pii.js';
@@ -34,8 +34,24 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       const validatedCtx = ctx ? validateTrustedContext(ctx) : {};
       const question = latestQuestion(validatedReq.messages);
       const intent = classifyLocal(question);
+      let accountContext: string | null | undefined;
+      if (cfg.userDataProvider) {
+        if (!validatedCtx.tenantId || !validatedCtx.userId) {
+          throw new SupportAgentError('invalid_request', 'authenticated tenantId and userId are required for account data lookup');
+        }
+        accountContext = await cfg.userDataProvider.load({
+          tenantId: validatedCtx.tenantId,
+          userId: validatedCtx.userId,
+          ...(validatedCtx.sessionId ? { sessionId: validatedCtx.sessionId } : {}),
+          question,
+          signal: validatedReq.signal,
+        });
+        if (accountContext !== undefined && accountContext !== null && typeof accountContext !== 'string') {
+          throw new Error('account data provider must return text or null');
+        }
+      }
       
-      const chunks = await retrieve(cfg, question, { audiences: validatedCtx.audiences, signal: validatedReq.signal });
+      const chunks = await retrieve(cfg, question, { audiences: validatedCtx.audiences, tenantId: validatedCtx.tenantId, signal: validatedReq.signal });
       const conf = scoreConfidence(chunks, cfg.confidence);
       
       let webSources;
@@ -76,6 +92,7 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
         webSources,
         ...(detectMiss ? { missMarker: MISS_MARKER } : {}),
         intent,
+        accountContext,
       });
       
       let history: ChatTurn[] = validatedReq.messages;
@@ -362,7 +379,8 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
   }
 
   async function* chat(req: unknown, ctx?: import('./types.js').TrustedContext): AsyncIterable<AgentEvent> {
-    if (!cfg.responseCache) { yield* uncachedChat(req, ctx); return; }
+    // A dynamic authenticated account lookup must not replay data from a stale response cache entry.
+    if (!cfg.responseCache || cfg.userDataProvider) { yield* uncachedChat(req, ctx); return; }
     const key = responseCacheKey(req, ctx);
     const cached = cfg.responseCache.get(key);
     if (cached) { yield* cached; return; }

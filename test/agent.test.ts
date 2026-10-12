@@ -72,6 +72,37 @@ describe('SupportAgent', () => {
     expect(events[2]).toMatchObject({ text: 'token1' });
   });
 
+  it('loads signed-in account data for each turn and includes it with retrieved knowledge', async () => {
+    const { buildSystemPrompt } = await import('../src/prompt.js');
+    const load = vi.fn().mockResolvedValue('Plan: Team');
+    const agent = createSupportAgent({
+      client: fakeClient,
+      model: 'm',
+      knowledge: fakeIndex,
+      userDataProvider: { load },
+    });
+    const request = { messages: [{ role: 'user' as const, content: 'What plan am I on?' }] };
+    const trustedContext = { tenantId: 'org-1', userId: 'user-1' };
+
+    for await (const _ of agent.chat(request, trustedContext)) { /* drain */ }
+    for await (const _ of agent.chat(request, trustedContext)) { /* dynamic account data skips replay cache */ }
+
+    expect(load).toHaveBeenCalledTimes(2);
+    expect(load).toHaveBeenCalledWith(expect.objectContaining({ tenantId: 'org-1', userId: 'user-1', question: 'Q' }));
+    expect(vi.mocked(buildSystemPrompt).mock.calls.at(-1)?.[0]).toMatchObject({ accountContext: 'Plan: Team' });
+  });
+
+  it('does not query or answer account data without authenticated tenant and user IDs', async () => {
+    const load = vi.fn();
+    const agent = createSupportAgent({ client: fakeClient, model: 'm', knowledge: fakeIndex, userDataProvider: { load } });
+    const events = [];
+    for await (const event of agent.chat({ messages: [{ role: 'user', content: 'What plan am I on?' }] })) events.push(event);
+
+    expect(load).not.toHaveBeenCalled();
+    expect(events.find(event => event.type === 'error')).toMatchObject({ code: 'invalid_request' });
+    expect(fakeClient.nr.stream).not.toHaveBeenCalled();
+  });
+
   it('low confidence → onGap called, web search path', async () => {
     const { scoreConfidence } = await import('../src/confidence.js');
     vi.mocked(scoreConfidence).mockReturnValue({ level: 'low', score: 0.1 });

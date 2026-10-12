@@ -15,5 +15,7 @@ describe('support scope prompt', () => {
     expect(prompt).toContain('Do not open with “I don’t know”');
     expect(prompt).toContain('numbered steps beginning with the first action');
     expect(prompt).toContain('Do not use a separate “Next step” heading');
+    expect(prompt).toContain('curated questions about live models');
+    expect(prompt).toContain('current source of truth');
   });
 });

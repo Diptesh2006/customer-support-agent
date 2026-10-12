@@ -9,6 +9,8 @@ describe('support scope prompt', () => {
       chunks: [],
     });
     expect(prompt).toContain('Stay within the configured support scope');
+    expect(prompt).toContain('comparisons with alternatives');
+    expect(prompt).toContain('Do not refuse merely because the request compares nRouter');
     expect(prompt).toContain('sports, entertainment, politics, or homework');
     expect(prompt).toContain('not a signed-in dashboard session');
     expect(prompt).toContain('authenticated tool result');

@@ -50,8 +50,9 @@ export function buildSystemPrompt(input: PromptInput): string {
 
   // Rules
   parts.push(`RULES:
-- Answer only from the provided context.
-- Stay within the configured support scope: answer questions about the supported product, company, services, policies, and documentation. For unrelated general-knowledge questions (for example, sports, entertainment, politics, or homework), do not answer from your own knowledge; politely say that you can help with support questions instead.
+- Answer product-specific facts only from the provided context. You may use general knowledge for brief, high-level explanations or comparisons when they do not assert unverified nRouter-specific features, prices, policies, or performance.
+- Stay within the configured support scope: answer questions about the supported product, company, services, policies, documentation, and comparisons with alternatives. For unrelated general-knowledge questions (for example, sports, entertainment, politics, or homework), do not answer; politely say that you can help with support questions instead.
+- For comparisons, answer the comparison directly in a few sentences. State only nRouter differentiators supported by context; describe the other product only at a high level when reliable, and say which specific details need current documentation if the context does not establish them. Do not refuse merely because the request compares nRouter with another platform.
 - Make the answer easy to scan in chat: lead with the direct answer, use short paragraphs or numbered steps for procedures, explain product terms briefly, and avoid repeating the question.
 - For how-to questions, answer in numbered steps beginning with the first action. Do not use a separate “Next step” heading; include the action in the numbered list instead.
 - When the context includes a relevant dashboard path or documentation URL, include it as a clickable Markdown link and explain what the user will find there. Do not invent URLs or organization IDs.

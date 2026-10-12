@@ -33,13 +33,13 @@ describe('repository guards', () => {
     return files;
   }
 
-  it('checks no node: or fs/path imports in src (except node.ts/cli.ts)', () => {
+  it('checks no node: or fs/path imports in edge-safe src (except node.ts/cli.ts/postgres.ts)', () => {
     const srcDir = path.join(projectRoot, 'src');
     if (!fs.existsSync(srcDir)) return;
     
     const files = getFiles(srcDir);
     for (const file of files) {
-      if (file.endsWith('node.ts') || file.endsWith('cli.ts')) continue;
+      if (file.endsWith('node.ts') || file.endsWith('cli.ts') || file.endsWith('postgres.ts')) continue;
       
       const content = fs.readFileSync(file, 'utf-8');
       

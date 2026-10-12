@@ -5,7 +5,7 @@ import { embed } from './client.js';
 export async function retrieve(
   cfg: ResolvedConfig,
   question: string,
-  opts?: { audiences?: string[]; signal?: AbortSignal },
+  opts?: { audiences?: string[]; tenantId?: string; signal?: AbortSignal },
 ): Promise<ScoredChunk[]> {
   const q = question.trim();
   if (!q) {
@@ -19,5 +19,9 @@ export async function retrieve(
     opts?.signal
   );
   if (!vecs || vecs.length === 0 || !vecs[0]) return [];
-  return cfg.store.search(vecs[0], { topK: cfg.topK, audiences: opts?.audiences });
+  return cfg.store.search(vecs[0], {
+    topK: cfg.topK,
+    ...(opts?.audiences !== undefined ? { audiences: opts.audiences } : {}),
+    ...(opts?.tenantId !== undefined ? { tenantId: opts.tenantId } : {}),
+  });
 }

@@ -52,6 +52,8 @@ export interface ScoredChunk {
 
 export interface SearchOptions {
   topK: number;
+  /** Organization boundary supplied by the authenticated host; stores may require it. */
+  tenantId?: string;
   /** When set, only chunks with no audiences or an overlapping audience match. */
   audiences?: string[];
 }
@@ -62,6 +64,17 @@ export interface KnowledgeStore {
   readonly embeddingModel: string;
   readonly dimensions: number;
   search(queryEmbedding: number[], opts: SearchOptions): Promise<ScoredChunk[]>;
+}
+
+/** Loads account facts from a host-owned authenticated data source for this turn. */
+export interface UserDataProvider {
+  load(input: {
+    tenantId: string;
+    userId: string;
+    sessionId?: string;
+    question: string;
+    signal?: AbortSignal;
+  }): Promise<string | null | undefined>;
 }
 
 export interface BuildIndexOptions {
@@ -257,6 +270,8 @@ export interface SupportAgentConfig {
   /** Emit related follow-up questions after an answer. Default off. */
   suggestions?: boolean | { max?: number };
   knowledge: KnowledgeStore | KnowledgeIndex;
+  /** Optional server-side account lookup; requires tenantId and userId in TrustedContext. */
+  userDataProvider?: UserDataProvider;
   agentName?: string;
   /** Extra operator instructions appended to the built-in system prompt. */
   instructions?: string;
@@ -289,6 +304,7 @@ export interface ResolvedConfig {
   booking: { url: string; label: string } | null;
   suggestions: { max: number } | null;
   store: KnowledgeStore;
+  userDataProvider: UserDataProvider | null;
   agentName: string;
   instructions: string;
   topK: number;
@@ -329,11 +345,15 @@ export interface ChatRequest {
  * What only the host may decide, from its own authenticated session — never
  * from the request body. `audiences` gates knowledge, `sessionId` keys stored
  * history, so taking either from the caller would let one user read another's
- * gated docs or conversation. Audiences are entitlement tags, not a tenancy
- * boundary: separate organisations get separate indexes and agents.
+ * gated docs or conversation. Audiences are entitlement tags; tenantId is the
+ * organization boundary for stores that support shared multi-tenant indexes.
  */
 export interface TrustedContext {
   identity?: EndUserIdentity;
+  /** Organization/tenant ID from the authenticated server session, never from request JSON. */
+  tenantId?: string;
+  /** Stable account user ID from the authenticated server session, never from request JSON. */
+  userId?: string;
   audiences?: string[];
   sessionId?: string;
 }

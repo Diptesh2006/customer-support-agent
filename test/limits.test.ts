@@ -10,12 +10,16 @@ describe('validateChatRequest', () => {
       pageContext: 'context',
       identity: { name: 'John' },
       audiences: ['dev'],
-      sessionId: 'sess-123'
+      sessionId: 'sess-123',
+      tenantId: 'browser-controlled-tenant',
+      userId: 'browser-controlled-user',
     };
     const validated = validateChatRequest(req, DEFAULT_LIMITS);
     expect((validated as any).identity).toBeUndefined();
     expect((validated as any).audiences).toBeUndefined();
     expect((validated as any).sessionId).toBeUndefined();
+    expect((validated as any).tenantId).toBeUndefined();
+    expect((validated as any).userId).toBeUndefined();
   });
 
   it('truncates pageContext to maxPageContextChars, rejecting if >10x', () => {
@@ -112,5 +116,12 @@ describe('validateTrustedContext', () => {
     expect(validateTrustedContext({ sessionId: '123' })).toEqual({ sessionId: '123' });
     expect(() => validateTrustedContext({ sessionId: '' })).toThrowError(SupportAgentError);
     expect(() => validateTrustedContext({ sessionId: 'a'.repeat(129) })).toThrowError(SupportAgentError);
+  });
+
+  it('validates authenticated tenant and user IDs', () => {
+    const ctx = { tenantId: 'org-123', userId: 'user-456' };
+    expect(validateTrustedContext(ctx)).toEqual(ctx);
+    expect(() => validateTrustedContext({ tenantId: '' })).toThrowError(SupportAgentError);
+    expect(() => validateTrustedContext({ userId: 'u'.repeat(129) })).toThrowError(SupportAgentError);
   });
 });

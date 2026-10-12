@@ -47,10 +47,7 @@ describe('retrieve', () => {
       1536,
       signal
     );
-    expect(mockStore.search).toHaveBeenCalledWith([0.1, 0.2], {
-      topK: 5,
-      audiences: ['dev']
-    });
+    expect(mockStore.search).toHaveBeenCalledWith([0.1, 0.2], { topK: 5, audiences: ['dev'] });
     expect(res).toEqual([{ id: '1', similarity: 0.9 }]);
   });
 
@@ -65,5 +62,15 @@ describe('retrieve', () => {
     await retrieve(cfg, '  padded question \n');
 
     expect(vi.mocked(client.embed).mock.calls[0]![2]).toEqual(['padded question']);
+  });
+
+  it('passes the host-verified tenant ID to a shared knowledge store', async () => {
+    const store = { embeddingModel: 'm', dimensions: 2, search: vi.fn().mockResolvedValue([]) };
+    const cfg = { client: {}, store, topK: 4 } as any;
+    vi.mocked(client.embed).mockResolvedValue([[0.2, 0.3]]);
+
+    await retrieve(cfg, 'account question', { tenantId: 'org-123' });
+
+    expect(store.search).toHaveBeenCalledWith([0.2, 0.3], { topK: 4, tenantId: 'org-123' });
   });
 });

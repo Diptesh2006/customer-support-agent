@@ -12,6 +12,20 @@ export function validateTrustedContext(ctx: unknown): TrustedContext {
 
   const result: TrustedContext = {};
 
+  if ('tenantId' in ctx && ctx.tenantId !== undefined) {
+    if (typeof ctx.tenantId !== 'string' || ctx.tenantId.trim().length < 1 || ctx.tenantId.length > 128) {
+      throw new SupportAgentError('invalid_request', 'tenantId must be a non-empty string <= 128 chars');
+    }
+    result.tenantId = ctx.tenantId;
+  }
+
+  if ('userId' in ctx && ctx.userId !== undefined) {
+    if (typeof ctx.userId !== 'string' || ctx.userId.trim().length < 1 || ctx.userId.length > 128) {
+      throw new SupportAgentError('invalid_request', 'userId must be a non-empty string <= 128 chars');
+    }
+    result.userId = ctx.userId;
+  }
+
   if ('identity' in ctx && ctx.identity !== undefined) {
     if (!isPlainObject(ctx.identity)) {
       throw new SupportAgentError('invalid_request', 'identity must be an object');

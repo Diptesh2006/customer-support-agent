@@ -24,7 +24,7 @@ describe('Evals Suite', () => {
         let response = '';
 
         if (q.includes('platform fee')) {
-          response = 'The platform fee is 5%.';
+          response = 'Pay as you go has a 4% platform fee added on top; Pro has a 0% fee.';
         } else if (q.includes('Which models are live')) {
           response = 'gpt and claude models are live.';
         } else if (q.includes('OpenAI-compatible')) {
@@ -65,6 +65,8 @@ describe('Evals Suite', () => {
           response = 'fallback 429 exhaust secondary.';
         } else if (q.includes('mask PII')) {
           response = 'mask pii email phone.';
+        } else if (q.includes('custom guardrails')) {
+          response = 'Open the Guardrails page, choose a template, and use the Test tab before live traffic. See https://nrouter.ai/docs/guides/guardrails.';
         } else if (q.includes('weather in Paris')) {
           confidence = 'low';
           response = 'I do not know.';
@@ -90,11 +92,12 @@ describe('Evals Suite', () => {
 
     const results = await runEvals(mockAgent);
     
-    expect(results.total).toBe(26);
+    expect(results.total).toBe(27);
     expect(results.failed).toBe(0);
     expect(results.passRate).toBe(100);
     expect(results.categories['Dashboard']?.passed).toBe(5);
     expect(results.categories['MCP Server']?.passed).toBe(5);
+    expect(results.categories['Guardrails']?.passed).toBe(3);
     expect(results.categories['Jev Classification']?.passed).toBe(2);
     expect(results.categories['Vector KB & Caching']?.passed).toBe(2);
   });

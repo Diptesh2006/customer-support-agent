@@ -44,6 +44,16 @@ describe('resolveConfig', () => {
     expect(() => resolveConfig(cfg)).toThrowError(SupportAgentError);
   });
 
+  it('requires a bounded static corpus for CAG', () => {
+    expect(() => resolveConfig({ ...validBaseConfig, knowledgeStrategy: 'cag' })).toThrowError(/knowledgeCorpus is required/);
+    expect(() => resolveConfig({
+      ...validBaseConfig,
+      knowledgeStrategy: 'cag',
+      knowledgeCorpus: [{ title: 'Guide', url: 'https://docs.test', content: '12345' }],
+      cagMaxContextChars: 4,
+    })).toThrowError(/exceeds cagMaxContextChars/);
+  });
+
   it('requires a callable user data provider when configured', () => {
     expect(() => resolveConfig({ ...validBaseConfig, userDataProvider: {} as any })).toThrowError(SupportAgentError);
   });

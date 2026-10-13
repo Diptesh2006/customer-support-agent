@@ -72,6 +72,33 @@ describe('SupportAgent', () => {
     expect(events[2]).toMatchObject({ text: 'token1' });
   });
 
+  it('CAG skips per-question embeddings, filters by trusted audience, and reports timings', async () => {
+    const { buildSystemPrompt } = await import('../src/prompt.js');
+    const { callHook } = await import('../src/hooks.js');
+    const metrics = vi.fn();
+    const agent = createSupportAgent({
+      client: fakeClient,
+      model: 'm',
+      knowledge: fakeIndex,
+      knowledgeStrategy: 'cag',
+      knowledgeCorpus: [
+        { title: 'Public', url: 'https://docs.test/public', content: 'Public guide' },
+        { title: 'Private', url: 'https://docs.test/private', content: 'Staff-only guide', audiences: ['staff'] },
+      ],
+      hooks: { onTurnMetrics: metrics },
+      responseCache: false,
+    });
+
+    for await (const _ of agent.chat({ messages: [{ role: 'user', content: 'Question' }] }, { audiences: ['customers'] })) { /* drain */ }
+
+    expect(fakeClient.embeddings.create).not.toHaveBeenCalled();
+    const prompt = vi.mocked(buildSystemPrompt).mock.calls.at(-1)?.[0];
+    expect(prompt?.chunks.map(chunk => chunk.content)).toEqual(['Public guide']);
+    expect(callHook).toHaveBeenCalledWith(expect.objectContaining({ onTurnMetrics: metrics }), 'onTurnMetrics', expect.objectContaining({
+      strategy: 'cag', cacheHit: false, contextChars: 'Public guide'.length,
+    }));
+  });
+
   it('loads signed-in account data for each turn and includes it with retrieved knowledge', async () => {
     const { buildSystemPrompt } = await import('../src/prompt.js');
     const load = vi.fn().mockResolvedValue('Plan: Team');

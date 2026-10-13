@@ -121,6 +121,35 @@ export function resolveConfig(config: SupportAgentConfig): ResolvedConfig {
     throw new SupportAgentError('invalid_config', 'invalid knowledge store shape');
   }
 
+  const knowledgeStrategy = config.knowledgeStrategy ?? 'rag';
+  if (knowledgeStrategy !== 'rag' && knowledgeStrategy !== 'cag') {
+    throw new SupportAgentError('invalid_config', 'knowledgeStrategy must be rag or cag');
+  }
+  const cagMaxContextChars = config.cagMaxContextChars ?? 50_000;
+  if (!Number.isInteger(cagMaxContextChars) || cagMaxContextChars <= 0) {
+    throw new SupportAgentError('invalid_config', 'cagMaxContextChars must be a positive integer');
+  }
+  const sourceDocs = config.knowledgeCorpus ?? [];
+  if (knowledgeStrategy === 'cag' && sourceDocs.length === 0) {
+    throw new SupportAgentError('invalid_config', 'knowledgeCorpus is required when knowledgeStrategy is cag');
+  }
+  const corpusChars = sourceDocs.reduce((total, doc) => total + doc.title.length + doc.url.length + doc.content.length, 0);
+  if (knowledgeStrategy === 'cag' && corpusChars > cagMaxContextChars) {
+    throw new SupportAgentError('invalid_config', `knowledgeCorpus exceeds cagMaxContextChars (${cagMaxContextChars})`);
+  }
+  if (sourceDocs.some(doc => !doc.title?.trim() || !doc.url?.trim() || typeof doc.content !== 'string')) {
+    throw new SupportAgentError('invalid_config', 'knowledgeCorpus documents must have title, url, and content');
+  }
+  const knowledgeCorpus = sourceDocs.map((doc, index) => ({
+    id: `cag-${index}`,
+    title: doc.title,
+    url: doc.url,
+    content: doc.content,
+    ...(doc.audiences ? { audiences: doc.audiences } : {}),
+    // CAG has no per-question similarity score; this neutral value is not used for ranking.
+    similarity: 0.5,
+  }));
+
   const limits = { ...DEFAULT_LIMITS, ...config.limits };
   if (!Number.isInteger(limits.maxMessages) || limits.maxMessages <= 0) {
     throw new SupportAgentError('invalid_config', 'limits.maxMessages must be a positive integer');
@@ -177,6 +206,9 @@ export function resolveConfig(config: SupportAgentConfig): ResolvedConfig {
     booking,
     suggestions,
     store,
+    knowledgeStrategy,
+    knowledgeCorpus,
+    cagMaxContextChars,
     userDataProvider: config.userDataProvider ?? null,
     agentName: config.agentName ?? DEFAULT_AGENT_NAME,
     instructions: config.instructions ?? '',

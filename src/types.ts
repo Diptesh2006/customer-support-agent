@@ -18,6 +18,17 @@ export interface SourceDoc {
   audiences?: string[];
 }
 
+export type KnowledgeStrategy = 'rag' | 'cag';
+
+export interface TurnMetrics {
+  strategy: KnowledgeStrategy;
+  cacheHit: boolean;
+  knowledgeMs: number;
+  answerMs: number;
+  totalMs: number;
+  contextChars: number;
+}
+
 /** One embedded chunk of a source document. */
 export interface KnowledgeChunk {
   /** Stable id: derived from url + chunk position, identical across rebuilds. */
@@ -208,6 +219,7 @@ export interface SupportAgentHooks {
   onCost?(cost: CostEvent): void | Promise<void>;
   onToolCall?(ev: ToolCallEvent): void | Promise<void>;
   onEscalation?(ev: EscalationEvent): void | Promise<void>;
+  onTurnMetrics?(metrics: TurnMetrics): void | Promise<void>;
   /** Receives errors from other hooks and non-fatal internal failures. Must not throw. */
   onError?(err: SafeError): void;
 }
@@ -270,6 +282,12 @@ export interface SupportAgentConfig {
   /** Emit related follow-up questions after an answer. Default off. */
   suggestions?: boolean | { max?: number };
   knowledge: KnowledgeStore | KnowledgeIndex;
+  /** Knowledge path; RAG remains the default. CAG requires the static corpus below. */
+  knowledgeStrategy?: KnowledgeStrategy;
+  /** Complete, approved public docs (MD/MDX) supplied for CAG; never pass user/account data here. */
+  knowledgeCorpus?: SourceDoc[];
+  /** Maximum CAG corpus size in characters (default 50000); oversized corpora fail at startup. */
+  cagMaxContextChars?: number;
   /** Optional server-side account lookup; requires tenantId and userId in TrustedContext. */
   userDataProvider?: UserDataProvider;
   agentName?: string;
@@ -304,6 +322,9 @@ export interface ResolvedConfig {
   booking: { url: string; label: string } | null;
   suggestions: { max: number } | null;
   store: KnowledgeStore;
+  knowledgeStrategy: KnowledgeStrategy;
+  knowledgeCorpus: ScoredChunk[];
+  cagMaxContextChars: number;
   userDataProvider: UserDataProvider | null;
   agentName: string;
   instructions: string;

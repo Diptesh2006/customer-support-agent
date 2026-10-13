@@ -21,6 +21,9 @@ describe('support scope prompt', () => {
     expect(prompt).toContain('Do not use a separate “Next step” heading');
     expect(prompt).toContain('curated questions about live models');
     expect(prompt).toContain('current source of truth');
+    expect(prompt).toContain('For guardrail questions, use the supplied Guardrails guide as the source of truth');
+    expect(prompt).toContain('never infer a create-form workflow from a guardrail type');
+    expect(prompt).toContain('the public guide does not specify the Custom creation form or webhook contract');
   });
 
   it('adds authenticated account data as bounded data, not instructions', () => {

@@ -24,15 +24,30 @@ import { buildSuggestions } from './suggestions.js';
 import { isSmallTalk } from './small-talk.js';
 import { responseCacheKey } from './cache.js';
 import { classifyLocal } from './jev.js';
+import { curatedAnswer } from './curated-answers.js';
 
 export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
   const cfg = resolveConfig(config);
 
   async function* uncachedChat(req: unknown, ctx?: import('./types.js').TrustedContext): AsyncIterable<AgentEvent> {
+    const requestStartedAt = Date.now();
     try {
       const validatedReq = validateChatRequest(req, cfg.limits);
       const validatedCtx = ctx ? validateTrustedContext(ctx) : {};
       const question = latestQuestion(validatedReq.messages);
+      const curated = curatedAnswer(question);
+      if (curated) {
+        for (const event of curated) yield event;
+        if (cfg.hooks.onTurnMetrics) callHook(cfg.hooks, 'onTurnMetrics', {
+          strategy: cfg.knowledgeStrategy,
+          cacheHit: false,
+          knowledgeMs: 0,
+          answerMs: 0,
+          totalMs: Date.now() - requestStartedAt,
+          contextChars: 0,
+        });
+        return;
+      }
       const intent = classifyLocal(question);
       let accountContext: string | null | undefined;
       if (cfg.userDataProvider) {
@@ -51,7 +66,11 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
         }
       }
       
-      const chunks = await retrieve(cfg, question, { audiences: validatedCtx.audiences, tenantId: validatedCtx.tenantId, signal: validatedReq.signal });
+      const knowledgeStartedAt = Date.now();
+      const chunks = cfg.knowledgeStrategy === 'cag'
+        ? cfg.knowledgeCorpus.filter(chunk => !chunk.audiences?.length || chunk.audiences.some(a => validatedCtx.audiences?.includes(a)))
+        : await retrieve(cfg, question, { audiences: validatedCtx.audiences, tenantId: validatedCtx.tenantId, signal: validatedReq.signal });
+      const knowledgeMs = Date.now() - knowledgeStartedAt;
       const conf = scoreConfidence(chunks, cfg.confidence);
       
       let webSources;
@@ -332,6 +351,17 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
          await mem.add({ role: 'assistant', content: fullResponse });
       }
 
+      if (cfg.hooks.onTurnMetrics) {
+        callHook(cfg.hooks, 'onTurnMetrics', {
+          strategy: cfg.knowledgeStrategy,
+          cacheHit: false,
+          knowledgeMs,
+          answerMs: Math.max(0, Date.now() - requestStartedAt - knowledgeMs),
+          totalMs: Date.now() - requestStartedAt,
+          contextChars: chunks.reduce((total, chunk) => total + chunk.content.length, 0),
+        });
+      }
+
       if (matchesHumanIntent(question)) {
          if (cfg.hooks.onEscalation) {
             callHook(cfg.hooks, 'onEscalation', {
@@ -383,7 +413,13 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
     if (!cfg.responseCache || cfg.userDataProvider) { yield* uncachedChat(req, ctx); return; }
     const key = responseCacheKey(req, ctx);
     const cached = cfg.responseCache.get(key);
-    if (cached) { yield* cached; return; }
+    if (cached) {
+      if (cfg.hooks.onTurnMetrics) callHook(cfg.hooks, 'onTurnMetrics', {
+        strategy: cfg.knowledgeStrategy, cacheHit: true, knowledgeMs: 0, answerMs: 0, totalMs: 0, contextChars: 0,
+      });
+      yield* cached;
+      return;
+    }
     const events: AgentEvent[] = [];
     for await (const event of uncachedChat(req, ctx)) { events.push(event); yield event; }
     cfg.responseCache.set(key, events);

@@ -18,6 +18,18 @@ nRouter exposes a secure, high-throughput reverse proxy for all registered MCP s
 - **Tenant Isolation:** The proxy verifies tenant boundaries, rate limits, and credit reservations before forwarding any tool invocations.
 - **Header Sanitization:** Upstream headers and client request headers are sanitized to eliminate credential leaks.
 
+## Guardrails
+
+Configure request and response protections from the dashboard's **Guardrails** page. nRouter supports Presidio PII detection/redaction, regex rules, keyword blocklists, prompt-injection detection, and custom webhook checks. Choose pre-call or post-call mode and an action: Block, Redact, Warn, or Log.
+
+- Use **Templates** for common setups such as PII redaction and prompt-injection detection.
+- Open a guardrail's **Test** tab to try sample input before applying it to live traffic.
+- Use **Versions** to review changes and roll back if needed.
+- View evaluations under **Guardrails → Logs**. Assign rules to individual keys under **Guardrails → Keys**; organization guardrails are managed on the main Guardrails page.
+- Owners and admins can create, edit, delete, and roll back guardrails. Any organization member can view and test them.
+
+For the full guide, see [nRouter Guardrails](https://nrouter.ai/docs/guides/guardrails). The **MCP Hub** manages MCP server connections; it is a separate dashboard area from **Guardrails**.
+
 ## Client Configuration (Claude Desktop & Cursor)
 
 Connecting AI tools to company MCP servers through nRouter is simple and uniform. Configure `claude_desktop_config.json` or Cursor MCP settings:
@@ -44,9 +56,6 @@ Or for direct HTTP SSE clients:
 - **URL:** `https://api.nrouter.ai/mcp/{server_name}`
 - **Headers:** `{"Authorization": "Bearer sk-nrouter-..."}`
 
-## Tier Allowances
+## Plan limits
 
-MCP server allowances are enforced according to the organization's subscription tier:
-- **Free Tier:** Allows up to 3 registered MCP servers.
-- **Pro Tier & Free with Active Subscription:** Allows up to 10 registered MCP servers.
-- **Enterprise Tier:** Custom server allowances, dedicated egress IPs, and custom mTLS tunnels.
+Do not assume a fixed MCP server quota from the plan name. Check the current [nRouter pricing page](https://nrouter.ai/pricing) and the signed-in dashboard for the limits that apply to your organization.

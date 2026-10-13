@@ -24,6 +24,7 @@ if (!apiKey) {
 const baseURL = env('NROUTER_BASE_URL') || undefined;
 const docsDir = env('DOCS_DIR', 'examples/quickstart/docs');
 const kbPath = env('KB_PATH', 'kb.json');
+const skipBlockedDocs = env('DOCS_SKIP_BLOCKED') === 'true';
 const port = Number(env('PORT', '4175'));
 const searchDomains = env('WEB_SEARCH_DOMAINS').split(',').map((d) => d.trim()).filter(Boolean);
 const bookingUrl = env('BOOKING_URL');
@@ -34,18 +35,28 @@ async function loadOrBuildKnowledge() {
   console.log(`${previousIndex ? 'Refreshing' : 'Building'} the knowledge index from ${docsDir} ...`);
   const docs = await readDocsDir(docsDir, env('DOCS_BASE_URL') || undefined);
   if (docs.length === 0) throw new Error(`No .md, .mdx or .txt files found in ${docsDir}`);
-  const index = await buildKnowledgeIndex({ client: new nRouter({ apiKey, baseURL }), docs, previousIndex });
+  const index = await buildKnowledgeIndex({
+    client: new nRouter({ apiKey, baseURL }),
+    docs,
+    previousIndex,
+    skipBlocked: skipBlockedDocs,
+    onSkip: (doc) => console.warn(`[docs:skipped] ${doc.url} (${doc.reason})`),
+  });
   await saveKnowledgeIndex(kbPath, index);
   console.log(`${previousIndex ? 'Refreshed' : 'Indexed'} ${docs.length} documents as ${index.chunks.length} chunks -> ${kbPath}`);
-  return index;
+  return { index, docs };
 }
 
 // 2. The agent.
+const { index, docs } = await loadOrBuildKnowledge();
+const knowledgeStrategy = env('KNOWLEDGE_STRATEGY', 'rag');
 const agent = createSupportAgent({
   apiKey,
   baseURL,
   model: env('MODEL', 'claude-haiku-4-5-20251001'),
-  knowledge: await loadOrBuildKnowledge(),
+  knowledge: index,
+  knowledgeStrategy,
+  ...(knowledgeStrategy === 'cag' ? { knowledgeCorpus: docs } : {}),
   agentName: env('AGENT_NAME', 'Support'),
   instructions: env('AGENT_INSTRUCTIONS'),
   suggestions: true,
@@ -57,6 +68,7 @@ const agent = createSupportAgent({
     // Questions your docs could not answer: the list of what to write next.
     onGap: (gap) => console.log(`[gap] ${gap.question}`),
     onCost: (cost) => console.log(`[cost] ${cost.status === 'exact' ? `$${cost.costUsd}` : 'unpriced'}`),
+    onTurnMetrics: (metrics) => console.log(`[metrics] ${JSON.stringify(metrics)}`),
   },
 });
 

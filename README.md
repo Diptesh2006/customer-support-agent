@@ -24,6 +24,13 @@ npm run example             # http://127.0.0.1:4175
 The first start indexes the sample docs in `examples/quickstart/docs/` and writes `kb.json`. Ask it
 "how do I get a refund?" and it answers from those files, with the source linked.
 
+For the nRouter support deployment, point `DOCS_DIR` at a synced copy of the public MDX docs in
+`nrouter-frontend-ui/resources/web/content/docs` and set `DOCS_BASE_URL=https://nrouter.ai/docs`.
+That source currently includes the account, dashboard guides, API references, frameworks, and SDK
+guides. Keep this larger corpus on RAG; CAG is for small corpora that fit entirely in the model
+context. The deployment must receive updated docs when the frontend docs change, then rebuild the
+knowledge index before serving traffic.
+
 Everything is in two files you can read in a few minutes:
 [`examples/quickstart/server.mjs`](examples/quickstart/server.mjs) (the agent and its endpoint) and
 [`examples/quickstart/index.html`](examples/quickstart/index.html) (a chat page that reads the stream).
@@ -35,7 +42,8 @@ Every setting is explained in [`.env.example`](.env.example).
    `DOCS_BASE_URL` to where they are published (that is what the source links point to). A `title:`
    in a file's frontmatter becomes the source name. Public pages can be indexed alongside the folder:
    `npx support-agent build-kb --docs ./docs --seed-url https://example.com/help --out kb.json`.
-   Delete `kb.json` and restart whenever the docs change; a stale index gives stale answers.
+   Restart after docs change; the example refreshes the index and reuses embeddings for unchanged
+   chunks. In a production deployment, run that refresh as part of the docs publishing/deploy flow.
 2. **Give it a name and house rules.** `AGENT_NAME` and `AGENT_INSTRUCTIONS` (tone, what to do when
    it cannot help, what never to promise). The agent already answers only from your docs, cites
    them, and treats page and web text as data, never as instructions.
@@ -120,6 +128,8 @@ export async function POST(req: Request) {
 | `booking` | Optional `{ url, label? }`. Offers a booking link through the `action` event. `url` must be `https:` and at most 2048 characters; `label` is at most 60 characters and defaults to `Book a meeting` |
 | `suggestions` | Optional `true` or `{ max }` (1 to 5, default 3). Emits related follow-up questions through the `suggestions` event. Off by default |
 | `knowledge` | `KnowledgeStore` or `KnowledgeIndex` JSON |
+| `knowledgeStrategy`, `knowledgeCorpus` | Keep `rag` (default) for embedding retrieval, or opt into `cag` by supplying the complete approved static `SourceDoc[]` corpus. CAG places every eligible document in each prompt; it is intended for small corpora and does not support tenant-private docs in the shared corpus |
+| `cagMaxContextChars` | Maximum total characters in the CAG corpus (default 50,000); startup fails instead of silently truncating docs |
 | `webSearch` | Optional web search provider, used only when the knowledge base has no confident answer. `createNRouterWebSearch({ apiKey })` searches through the gateway with the same key (see [Web Search](#web-search)) |
 | `memoryStore` | Optional `(sessionId) => MemoryStore` from `@nrouter_ai/sdk`. When set and the host passes `ctx.sessionId`, the stored history is authoritative: only the latest user turn from the request is appended, and earlier turns in the request body are ignored |
 | `maskPii` | Mask emails and phone numbers before text leaves the process (default `true`) |
@@ -304,6 +314,7 @@ Configure `hooks` to observe a turn. The package stores nothing; the host persis
 |---|---|
 | `onGap` | A question the docs could not answer confidently |
 | `onCost` | What the turn cost, with `actualModel` and `routingChain` when known |
+| `onTurnMetrics` | Per-turn `{ strategy, cacheHit, knowledgeMs, answerMs, totalMs, contextChars }`; use the same eval set under RAG and CAG to compare latency/context size. CAG still incurs model input cost and its confidence score is not a semantic similarity score |
 | `onFeedback` | A rating passed to `agent.feedback()` |
 | `onToolCall` | Each tool step (`running`, `done`, `error`) |
 | `onEscalation` | A turn that needs a person, with a `reason`: `human_requested` (the visitor asked for a human), `low_confidence` (no confident answer), or `unresolved` (a thumbs-down rating) |

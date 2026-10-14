@@ -1,7 +1,7 @@
 {
   "name": "@nrouter_ai/support-agent",
   "version": "0.6.2",
-  "description": "A streaming customer-support agent built on @nrouter_ai/sdk: retrieval over your own docs, tools, confidence and citations. One API key, no database.",
+  "description": "A streaming customer-support agent built on @nrouter_ai/sdk with documentation retrieval, optional PostgreSQL/pgvector storage, trusted account context, tools, and citations.",
   "license": "MIT",
   "type": "module",
   "engines": {
@@ -26,6 +26,8 @@
   "files": [
     "dist",
     "bin",
+    "examples/quickstart/sync-postgres.mjs",
+    "migrations",
     "README.md",
     "LICENSE"
   ],

@@ -18,6 +18,17 @@ export interface SourceDoc {
   audiences?: string[];
 }
 
+export type KnowledgeStrategy = 'rag' | 'cag';
+
+export interface TurnMetrics {
+  strategy: KnowledgeStrategy;
+  cacheHit: boolean;
+  knowledgeMs: number;
+  answerMs: number;
+  totalMs: number;
+  contextChars: number;
+}
+
 /** One embedded chunk of a source document. */
 export interface KnowledgeChunk {
   /** Stable id: derived from url + chunk position, identical across rebuilds. */
@@ -52,6 +63,8 @@ export interface ScoredChunk {
 
 export interface SearchOptions {
   topK: number;
+  /** Organization boundary supplied by the authenticated host; stores may require it. */
+  tenantId?: string;
   /** When set, only chunks with no audiences or an overlapping audience match. */
   audiences?: string[];
 }
@@ -62,6 +75,17 @@ export interface KnowledgeStore {
   readonly embeddingModel: string;
   readonly dimensions: number;
   search(queryEmbedding: number[], opts: SearchOptions): Promise<ScoredChunk[]>;
+}
+
+/** Loads account facts from a host-owned authenticated data source for this turn. */
+export interface UserDataProvider {
+  load(input: {
+    tenantId: string;
+    userId: string;
+    sessionId?: string;
+    question: string;
+    signal?: AbortSignal;
+  }): Promise<string | null | undefined>;
 }
 
 export interface BuildIndexOptions {
@@ -195,6 +219,7 @@ export interface SupportAgentHooks {
   onCost?(cost: CostEvent): void | Promise<void>;
   onToolCall?(ev: ToolCallEvent): void | Promise<void>;
   onEscalation?(ev: EscalationEvent): void | Promise<void>;
+  onTurnMetrics?(metrics: TurnMetrics): void | Promise<void>;
   /** Receives errors from other hooks and non-fatal internal failures. Must not throw. */
   onError?(err: SafeError): void;
 }
@@ -257,6 +282,14 @@ export interface SupportAgentConfig {
   /** Emit related follow-up questions after an answer. Default off. */
   suggestions?: boolean | { max?: number };
   knowledge: KnowledgeStore | KnowledgeIndex;
+  /** Knowledge path; RAG remains the default. CAG requires the static corpus below. */
+  knowledgeStrategy?: KnowledgeStrategy;
+  /** Complete, approved public docs (MD/MDX) supplied for CAG; never pass user/account data here. */
+  knowledgeCorpus?: SourceDoc[];
+  /** Maximum CAG corpus size in characters (default 50000); oversized corpora fail at startup. */
+  cagMaxContextChars?: number;
+  /** Optional server-side account lookup; requires tenantId and userId in TrustedContext. */
+  userDataProvider?: UserDataProvider;
   agentName?: string;
   /** Extra operator instructions appended to the built-in system prompt. */
   instructions?: string;
@@ -289,6 +322,10 @@ export interface ResolvedConfig {
   booking: { url: string; label: string } | null;
   suggestions: { max: number } | null;
   store: KnowledgeStore;
+  knowledgeStrategy: KnowledgeStrategy;
+  knowledgeCorpus: ScoredChunk[];
+  cagMaxContextChars: number;
+  userDataProvider: UserDataProvider | null;
   agentName: string;
   instructions: string;
   topK: number;
@@ -329,11 +366,15 @@ export interface ChatRequest {
  * What only the host may decide, from its own authenticated session — never
  * from the request body. `audiences` gates knowledge, `sessionId` keys stored
  * history, so taking either from the caller would let one user read another's
- * gated docs or conversation. Audiences are entitlement tags, not a tenancy
- * boundary: separate organisations get separate indexes and agents.
+ * gated docs or conversation. Audiences are entitlement tags; tenantId is the
+ * organization boundary for stores that support shared multi-tenant indexes.
  */
 export interface TrustedContext {
   identity?: EndUserIdentity;
+  /** Organization/tenant ID from the authenticated server session, never from request JSON. */
+  tenantId?: string;
+  /** Stable account user ID from the authenticated server session, never from request JSON. */
+  userId?: string;
   audiences?: string[];
   sessionId?: string;
 }

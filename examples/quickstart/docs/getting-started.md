@@ -1,25 +1,26 @@
 ---
-title: Getting started with Acme
+title: Getting started with nRouter
+audiences: [public]
 ---
 
-# Getting started with Acme
+# Getting started with nRouter
 
-Acme is a project tracker for small teams. This page is sample content: replace
-the files in this folder with your own documentation.
+nRouter is a managed AI gateway for accessing supported models through one API and one account. The public support assistant can explain setup and documentation, but it cannot access private account data or change dashboard settings.
 
 ## Create an account
 
-1. Go to the sign-up page and enter your work email.
-2. Open the confirmation link we send you. It expires after 24 hours.
-3. Name your workspace. You can rename it later in **Settings → Workspace**.
+1. Open the [nRouter dashboard](https://app.nrouter.ai) and choose **Get started**.
+2. Complete account verification and sign in.
+3. Open your organization workspace and review the available models and plans.
 
-## Invite your team
+## Create an API key
 
-Open **Settings → Members** and choose **Invite**. Enter one email per line.
-Invited people join as members; a workspace owner can promote them to admin.
-Each workspace can have up to 50 members on the Team plan.
+After signing in, open the organization’s **Keys** area in the dashboard. Create a virtual key with only the models, rate limits, and spend ceiling your application needs. Store the secret securely; if it is exposed, revoke it and create a replacement.
 
-## Reset your password
+## Make your first request
 
-On the sign-in page choose **Forgot password**. The reset link is valid for one
-hour. If no email arrives, check your spam folder, then contact support.
+Use the API base URL and model shown in the dashboard or API documentation. Keep the API key on your server and send it as a bearer credential. Never place a real key in browser code, public repositories, screenshots, or chat messages.
+
+## Get help
+
+Keep the request ID when a request fails. The support assistant can explain public nRouter documentation. For account-specific questions about keys, credits, billing, or usage, use the signed-in support channel or contact the nRouter team.

@@ -3,6 +3,14 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import type { KnowledgeIndex, SourceDoc } from './types.js';
 import { validateIndex } from './knowledge/validate.js';
+export {
+  createPostgresKnowledgeStore,
+  syncPostgresKnowledgeIndex,
+  type PostgresPool,
+  type PostgresConnection,
+  type PostgresQueryResult,
+  type PostgresKnowledgeStoreOptions,
+} from './postgres.js';
 
 export async function loadKnowledgeIndex(filepath: string): Promise<KnowledgeIndex> {
   const data = await fs.readFile(filepath, 'utf-8');

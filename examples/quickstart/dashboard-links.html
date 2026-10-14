@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>nRouter dashboard links</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #111; line-height: 1.5; }
+    .card { border: 1px solid #ddd; border-radius: 14px; padding: 1rem 1.2rem; margin: .8rem 0; }
+    h1 { margin-bottom: .25rem; }
+    .muted { color: #666; }
+    a { color: #0645ad; }
+    code { background: #f3f3f3; padding: .15rem .3rem; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>nRouter dashboard access</h1>
+  <p class="muted">Use these links to check which dashboard areas your current account can access.</p>
+  <div class="card"><strong>Live dashboard</strong><br><a href="https://app.nrouter.ai" target="_blank" rel="noopener noreferrer">Open app.nrouter.ai</a></div>
+  <div class="card"><strong>Local support agent</strong><br><a href="/">Open the local support chatbot</a><br><span class="muted">The chatbot answers from the local knowledge base and provides source links.</span></div>
+  <div class="card"><strong>Organization dashboard areas</strong>
+    <ul>
+      <li><a href="https://app.nrouter.ai/[org]/keys" target="_blank" rel="noopener noreferrer">Virtual keys</a></li>
+      <li><a href="https://app.nrouter.ai/[org]/logs" target="_blank" rel="noopener noreferrer">Usage and logs</a></li>
+      <li><a href="https://app.nrouter.ai/[org]/debug" target="_blank" rel="noopener noreferrer">Debug and traces</a></li>
+      <li><a href="https://app.nrouter.ai/[org]/billing" target="_blank" rel="noopener noreferrer">Billing</a></li>
+    </ul>
+    <p class="muted">Replace <code>[org]</code> with your organization slug if the live dashboard requires it.</p>
+  </div>
+</body>
+</html>

@@ -1,47 +1,45 @@
-# nRouter Dashboards
+---
+title: Dashboard and account help
+audiences: [public]
+---
 
-The nRouter web dashboard is accessible at `https://app.nrouter.ai` (or `http://localhost:5001` in local development). It provides self-serve multi-tenant management for API virtual keys, spend analytics, live request tracing, MCP servers, and model catalog exploration.
+# nRouter dashboard and account help
 
-## Organization & Workspace Navigation
+The nRouter dashboard is available at `https://app.nrouter.ai` (or `http://localhost:5001` during local development). It provides self-serve tools for virtual API keys, usage, billing, request tracing, MCP servers, and model discovery.
 
-Every resource belongs to an Organization workspace accessible via `/[org]/...`:
-- `/[org]/keys`: Virtual key lifecycle, rate limits, and spend ceilings.
-- `/[org]/logs`: Real-time request log stream and exact list-price spend tracking.
-- `/[org]/debug`: Interactive Request Debug & Trace Canvas and Answer Inspector.
-- `/[org]/mcp-hub`: Centralized Model Context Protocol (MCP) server registry.
-- `/[org]/tools-hub`: Catalog of exposed tools and schema introspection.
-- `/[org]/models`: Live model catalog and benchmarks.
-- `/[org]/playground`: Interactive multi-model prompt testing.
-- `/[org]/billing`: Usage allowances, prepaid credits, and subscription tiers.
+## Organization and workspace navigation
 
-## Virtual Keys Management (`/[org]/keys`)
+Resources belong to an organization workspace. Common areas include:
 
-Virtual keys allow organizations to safely distribute access to developers, applications, or end-users while keeping total budget control:
-- **Key Format:** Every key carries the prefix `sk-nrouter-...`.
-- **Spend Ceilings:** Configure a hard spend limit in USD (e.g. $10, $50, $250). When the ceiling is reached, subsequent requests are refused with HTTP 402 without incurring overage.
-- **Model Restrictions:** Restrict a virtual key to specific allowed models (e.g. allow only `gemini-3.8-flash` or `claude-haiku-4-5`, while blocking expensive models).
-- **Rate Limits:** Enforce per-key request-per-minute (RPM) and tokens-per-minute (TPM) ceilings.
-- **CIDR & IP Allowlist:** Restrict key usage to specific corporate IP addresses or CIDR blocks.
-- **Fallback Chains:** Pinned secondary models ensure seamless fallback when upstream providers return 429 quota exhaustion.
+- [Virtual keys](https://app.nrouter.ai/[org]/keys): key lifecycle, model restrictions, rate limits, and spend ceilings.
+- [Usage and logs](https://app.nrouter.ai/[org]/logs): request logs, usage, latency, request IDs, and spend.
+- [Debug and traces](https://app.nrouter.ai/[org]/debug): request trace and answer inspection.
+- [MCP Hub](https://app.nrouter.ai/[org]/mcp-hub): MCP server registry.
+- [Tools Hub](https://app.nrouter.ai/[org]/tools-hub): exposed tools and schemas.
+- [Models](https://app.nrouter.ai/[org]/models): available models and benchmarks.
+- [Playground](https://app.nrouter.ai/[org]/playground): interactive prompt testing.
+- [Billing](https://app.nrouter.ai/[org]/billing): allowances, credits, and subscription details.
 
-## Spend Logs & Cost Accounting (`/[org]/logs`)
+## API keys
 
-The spend logs surface transparent accounting for every inference call:
-- **Exact List-Price Settlement:** Billed at the exact list price of the served model.
-- **Disjoint Token Breakdown:** Separates input, output, cache-read, cache-write (5m/1h), and reasoning tokens.
-- **Cost Status:** Indicates `exact` for verified list pricing, or `unpriced` if unknown (costs are never reported as $0.00 unless explicitly free).
-- **Latency & Observability:** Track time-to-first-token (TTFT), total duration, HTTP status code, and export logs to CSV.
+Create and manage virtual API keys from the dashboard. Give each key only the access and spend limit it needs. Keys may have model restrictions, RPM/TPM rate limits, CIDR/IP allowlists, and fallback settings. The full secret is shown once when a key is created, so store it securely. If a key is lost or exposed, revoke it immediately and create a replacement. Never paste a full key into chat, email, logs, or support tickets.
 
-## Request Debug & Trace Canvas (`/[org]/debug`)
+To create one: sign in at [app.nrouter.ai](https://app.nrouter.ai), open your organization, go to [Virtual keys](https://app.nrouter.ai/[org]/keys), select **Create key**, choose the required models and limits, and copy the secret when it is shown. Use it as `Authorization: Bearer sk-nrouter-...` from your server. If **Create key** is not visible, ask a workspace owner or contact nRouter support.
 
-The trace canvas provides high-precision debugging for every request:
-- **Pipeline Canvas:** An interactive node graph detailing the request path across Edge WAF, safety checks, Cortex scoring, credit reservation, upstream dispatch, and settlement.
-- **Timeline Gantt:** High-precision waterfall trace showing the 7 canonical execution stages:
-  1. Edge WAF: Pre-auth size, method, and URI validation.
-  2. Gate 0: Platform and tenant emergency safety hold evaluation.
-  3. Phase 1: In-memory model access ACLs and virtual key validation.
-  4. Phase 2: RPM and TPM rate limit token bucket consumption.
-  5. Phase 3: Cortex moderation and prompt injection classification over mTLS.
-  6. Phase 4: Two-tier credit reservation and plan allowance hold.
-  7. Phase 5: Upstream provider execution, streaming response, and spend settlement.
-- **Answer Inspector:** Deep inspection drawer showing prompt transformations, system prompt injection checks, and response headers (`x-nr-request-id`, `x-nr-request-cost`).
+## Usage, billing, and limits
+
+Use usage and request logs to review activity, spend, model usage, request IDs, status codes, and latency. Logs can show input, output, cache, and reasoning token details. A request may show an `unpriced` status when pricing metadata was unavailable; this does not mean the request was free.
+
+The dashboard is also the place to review model availability, budgets, spend ceilings, quota, and rate-limit behavior. A key with a spend ceiling or model restriction cannot exceed those settings. Keep the request ID when contacting support about a failed request.
+
+## Request debugging
+
+The debug area can show the request pipeline, timing, validation, rate-limit checks, safety checks, credit reservation, upstream execution, streaming, and settlement. The answer inspector may show prompt transformations and response metadata such as request ID and cost headers. Do not share secrets from debug output.
+
+## Team access
+
+Workspace owners can invite teammates from the dashboard and assign the appropriate organization role. Give each person the least access needed for their work.
+
+## Getting help
+
+Signed-in users should use the in-app support drawer for account-specific questions about keys, credits, budgets, failed requests, or request IDs. The support agent can explain public documentation, but it must not guess private account values. Contact a human when the agent cannot resolve the issue.

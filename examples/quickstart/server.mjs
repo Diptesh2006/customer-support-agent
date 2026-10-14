@@ -24,28 +24,39 @@ if (!apiKey) {
 const baseURL = env('NROUTER_BASE_URL') || undefined;
 const docsDir = env('DOCS_DIR', 'examples/quickstart/docs');
 const kbPath = env('KB_PATH', 'kb.json');
+const skipBlockedDocs = env('DOCS_SKIP_BLOCKED') === 'true';
 const port = Number(env('PORT', '4175'));
 const searchDomains = env('WEB_SEARCH_DOMAINS').split(',').map((d) => d.trim()).filter(Boolean);
 const bookingUrl = env('BOOKING_URL');
 
 // 1. The knowledge index: built once from your docs, then reused from disk.
 async function loadOrBuildKnowledge() {
-  if (existsSync(kbPath)) return loadKnowledgeIndex(kbPath);
-  console.log(`Building the knowledge index from ${docsDir} ...`);
+  const previousIndex = existsSync(kbPath) ? await loadKnowledgeIndex(kbPath) : undefined;
+  console.log(`${previousIndex ? 'Refreshing' : 'Building'} the knowledge index from ${docsDir} ...`);
   const docs = await readDocsDir(docsDir, env('DOCS_BASE_URL') || undefined);
   if (docs.length === 0) throw new Error(`No .md, .mdx or .txt files found in ${docsDir}`);
-  const index = await buildKnowledgeIndex({ client: new nRouter({ apiKey, baseURL }), docs });
+  const index = await buildKnowledgeIndex({
+    client: new nRouter({ apiKey, baseURL }),
+    docs,
+    previousIndex,
+    skipBlocked: skipBlockedDocs,
+    onSkip: (doc) => console.warn(`[docs:skipped] ${doc.url} (${doc.reason})`),
+  });
   await saveKnowledgeIndex(kbPath, index);
-  console.log(`Indexed ${docs.length} documents as ${index.chunks.length} chunks -> ${kbPath}`);
-  return index;
+  console.log(`${previousIndex ? 'Refreshed' : 'Indexed'} ${docs.length} documents as ${index.chunks.length} chunks -> ${kbPath}`);
+  return { index, docs };
 }
 
 // 2. The agent.
+const { index, docs } = await loadOrBuildKnowledge();
+const knowledgeStrategy = env('KNOWLEDGE_STRATEGY', 'rag');
 const agent = createSupportAgent({
   apiKey,
   baseURL,
   model: env('MODEL', 'claude-haiku-4-5-20251001'),
-  knowledge: await loadOrBuildKnowledge(),
+  knowledge: index,
+  knowledgeStrategy,
+  ...(knowledgeStrategy === 'cag' ? { knowledgeCorpus: docs } : {}),
   agentName: env('AGENT_NAME', 'Support'),
   instructions: env('AGENT_INSTRUCTIONS'),
   suggestions: true,
@@ -57,12 +68,14 @@ const agent = createSupportAgent({
     // Questions your docs could not answer: the list of what to write next.
     onGap: (gap) => console.log(`[gap] ${gap.question}`),
     onCost: (cost) => console.log(`[cost] ${cost.status === 'exact' ? `$${cost.costUsd}` : 'unpriced'}`),
+    onTurnMetrics: (metrics) => console.log(`[metrics] ${JSON.stringify(metrics)}`),
   },
 });
 
 // 3. The endpoint. `ctx` is what YOUR login knows about the visitor; nothing in
 // the request body is trusted for identity.
 const page = fileURLToPath(new URL('./index.html', import.meta.url));
+const dashboardLinksPage = fileURLToPath(new URL('./dashboard-links.html', import.meta.url));
 const MAX_BODY_BYTES = 64 * 1024;
 
 async function readJson(req) {
@@ -78,12 +91,29 @@ async function readJson(req) {
 
 const server = http.createServer(async (req, res) => {
   try {
+    const origin = req.headers.origin;
+    if (origin === 'http://localhost:3000' || origin === 'http://127.0.0.1:3000') {
+      res.setHeader('Access-Control-Allow-Origin', origin);
+      res.setHeader('Vary', 'Origin');
+      res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+      res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    }
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
     if (req.method === 'GET' && req.url === '/') {
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(await readFile(page));
       return;
     }
-    if (req.method === 'POST' && req.url === '/api/chat') {
+    if (req.method === 'GET' && req.url === '/dashboard-links.html') {
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(await readFile(dashboardLinksPage));
+      return;
+    }
+    if (req.method === 'POST' && (req.url === '/api/chat' || req.url === '/api/public/ask')) {
       const body = await readJson(req);
       const ctx = {}; // e.g. { identity: { name, plan }, audiences: ['customers'], sessionId }
       const reader = agent.chatSSE({ messages: body.messages }, ctx).getReader();

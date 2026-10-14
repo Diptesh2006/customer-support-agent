@@ -67,9 +67,17 @@ export function createSupportAgent(config: SupportAgentConfig): SupportAgent {
       }
       
       const knowledgeStartedAt = Date.now();
-      const chunks = cfg.knowledgeStrategy === 'cag'
-        ? cfg.knowledgeCorpus.filter(chunk => !chunk.audiences?.length || chunk.audiences.some(a => validatedCtx.audiences?.includes(a)))
-        : await retrieve(cfg, question, { audiences: validatedCtx.audiences, tenantId: validatedCtx.tenantId, signal: validatedReq.signal });
+      let chunks: import('./types.js').ScoredChunk[];
+      if (cfg.knowledgeStrategy === 'cag') {
+        chunks = cfg.knowledgeCorpus.filter(chunk => !chunk.audiences?.length || chunk.audiences.some(a => validatedCtx.audiences?.includes(a)));
+      } else {
+        try {
+          chunks = await retrieve(cfg, question, { audiences: validatedCtx.audiences, tenantId: validatedCtx.tenantId, signal: validatedReq.signal });
+        } catch (err) {
+          if (validatedReq.signal?.aborted || (err as Error)?.name === 'AbortError') throw err;
+          chunks = [];
+        }
+      }
       const knowledgeMs = Date.now() - knowledgeStartedAt;
       const conf = scoreConfidence(chunks, cfg.confidence);
       

@@ -16,7 +16,8 @@ export async function retrieve(
     cfg.store.embeddingModel,
     [q],
     cfg.store.dimensions,
-    opts?.signal
+    opts?.signal,
+    ...(cfg.maskPii !== undefined ? [{ maskPii: cfg.maskPii }] : [])
   );
   if (!vecs || vecs.length === 0 || !vecs[0]) return [];
   return cfg.store.search(vecs[0], {

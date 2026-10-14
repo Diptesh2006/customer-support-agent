@@ -101,6 +101,39 @@ describe('costFromMeta', () => {
     const cost = costFromMeta(meta as any);
     expect(cost.costUsd).toBeNull();
     expect(cost.status).toBe('unpriced');
+    expect(cost.routing).toBeUndefined();
+  });
+
+  it('extracts routing and routingChain from meta.routing / x-nr-routing and returns undefined when absent (CSA-30)', () => {
+    const withRouting = costFromMeta({
+      requestId: 'req_route_1',
+      cost: 0.015,
+      costStatus: 'exact',
+      model: 'openai/gpt-4.1-mini',
+      routing: 'fallback:1',
+    } as any);
+    expect(withRouting.routing).toBe('fallback:1');
+    expect(withRouting.routingChain).toBe('fallback:1');
+
+    const withHeaderKey = costFromMeta({
+      requestId: 'req_route_2',
+      cost: 0.015,
+      costStatus: 'exact',
+      model: 'openai/gpt-4.1-mini',
+      'x-nr-routing': 'direct',
+    } as any);
+    expect(withHeaderKey.routing).toBe('direct');
+    expect(withHeaderKey.routingChain).toBe('direct');
+
+    const withoutRouting = costFromMeta({
+      requestId: 'req_route_3',
+      cost: 0.015,
+      costStatus: 'exact',
+      model: 'openai/gpt-4.1-mini',
+      routing: null,
+    } as any);
+    expect(withoutRouting.routing).toBeUndefined();
+    expect(withoutRouting.routingChain).toBeUndefined();
   });
 });
 

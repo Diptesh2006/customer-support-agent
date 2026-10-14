@@ -152,8 +152,13 @@ export async function groundedSearch(
   return { text, citations, cost: costFromMeta(res.meta) };
 }
 
+export type RequestCost = CostEvent & { routing?: string };
+
 /** Map SDK ResponseMeta to a CostEvent. Unpriced → costUsd null, never 0. */
-export function costFromMeta(meta: ResponseMeta, routingChain?: string | null): CostEvent {
+export function costFromMeta(
+  meta: ResponseMeta & { routing?: string | null; 'x-nr-routing'?: string | null },
+  routingChain?: string | null,
+): RequestCost {
   const priced = isPriced(meta);
   
   let costUsd = null;
@@ -164,9 +169,11 @@ export function costFromMeta(meta: ResponseMeta, routingChain?: string | null): 
     costUsd = null;
   }
   
-  const res: CostEvent = {
+  const metaRouting = meta.routing ?? meta['x-nr-routing'] ?? undefined;
+  const res: RequestCost = {
     costUsd,
-    status: (priced && costUsd !== null) ? 'exact' : 'unpriced'
+    status: (priced && costUsd !== null) ? 'exact' : 'unpriced',
+    routing: meta.routing ?? meta['x-nr-routing'] ?? undefined,
   };
   
   if (meta.requestId) {
@@ -175,8 +182,10 @@ export function costFromMeta(meta: ResponseMeta, routingChain?: string | null): 
   if (meta.model) {
     res.actualModel = meta.model;
   }
-  if (routingChain !== undefined) {
-    res.routingChain = routingChain;
+  const effectiveRoutingChain = routingChain !== undefined ? routingChain : metaRouting;
+  if (effectiveRoutingChain !== undefined) {
+    res.routingChain = effectiveRoutingChain;
   }
   return res;
 }
+
